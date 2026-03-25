@@ -304,10 +304,8 @@ const PANEL_HTML = `
       </div>
       <div class="varupdate-setting-item">
         <label>自动从开场白初始化</label>
-        <div class="varupdate-setting-right">
-          <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-autoinit"></i>
-          <input id="varupdate-auto-init" type="checkbox" checked />
-        </div>
+        <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-autoinit"></i>
+        <input id="varupdate-auto-init" type="checkbox" checked />
       </div>
       <div class="varupdate-setting-item">
         <label for="varupdate-tolerance">容错阈值</label>
