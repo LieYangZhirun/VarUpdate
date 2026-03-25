@@ -1,0 +1,21 @@
+{
+  "name": "varupdate",
+  "version": "1.0.0",
+  "description": "VarUpdate —— SillyTavern 变量更新脚本",
+  "main": "dist/bundle.js",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs --dev",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "esbuild": "^0.20.0",
+    "js-yaml": "^4.1.1",
+    "typescript": "^5.4.0",
+    "vitest": "^3.0.0"
+  },
+  "license": "MIT"
+}
