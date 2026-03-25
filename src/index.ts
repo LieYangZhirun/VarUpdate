@@ -19,6 +19,7 @@ import { EVENTS } from './modules/event-bus.js';
 import * as notify from './modules/notification.js';
 import { registerMacros } from './modules/macro-engine.js';
 import { renderPanel, registerWandButtons, refreshDebugState } from './modules/ui-panel.js';
+import { getValueByPath } from './shared/path-utils.js';
 import type { ExtractedTag, MessageCompletePayload } from './types/index.js';
 
 // ═══════════════════════════════════════════
@@ -217,7 +218,6 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
   const schema = getCachedSchema();
   const context = schema ? {
     resolveRef: (path: string) => {
-      const { getValueByPath } = require('./shared/path-utils.js');
       return getValueByPath(dataCopy, path);
     }
   } : undefined;
