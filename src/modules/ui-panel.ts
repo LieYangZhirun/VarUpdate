@@ -12,16 +12,23 @@
  * H-1 独立面板：
  *   1. 使用指南按钮
  *   2. 操作按钮 × 5（完整文本，不缩写）
- *   3. 设置区域（通知等级 + 自动初始化 + 容错阈值 + 变量生命周期）
+ *   3. 设置区域（通知等级 + 自动从开场白初始化 + 容错阈值 + 楼层变量生命周期）
  *
  * H-2 魔棒快捷按钮 × 2：
- *   - 当前楼层重解析
+ *   - 重新解析当前楼层
  *   - 设置变量检查点
  */
 
 import * as notify from './notification.js';
 import { readVariables, writeVariables } from './variable-store.js';
 import type { NotifyLevel } from '../types/index.js';
+
+// ═══════════════════════════════════════════
+//  常量
+// ═══════════════════════════════════════════
+
+/** 持久化存储键名 */
+const CONFIG_KEY = 'VarUpdate_config';
 
 // ═══════════════════════════════════════════
 //  获取宿主文档
@@ -42,74 +49,114 @@ function getHostDocument(): Document {
 const HELP: Record<string, { title: string; content: string }> = {
   guide: {
     title: '📖 VarUpdate 使用指南',
-    content: `<b>VarUpdate</b> 为角色卡提供结构化变量管理能力。<br><br>
+    content: `<b>VarUpdate</b> 是一个结构化变量管理框架，让角色卡能够自动跟踪和维护结构化状态（如 HP、好感度、库存等）。<br><br>
 <b>核心概念：</b><br>
-• <b>Schema</b> — 在世界书 <code>[Var_Schema]</code> 中定义变量结构和约束<br>
-• <b>Default</b> — 在世界书 <code>[Var_Default]</code> 中提供默认值<br>
-• <b>Initial</b> — 在消息 <code>&lt;Var_Initial&gt;</code> 中设定初始状态<br>
-• <b>Update</b> — 在消息 <code>&lt;Var_Update&gt;</code> 中增量修改变量<br><br>
-<b>执行流程：</b><br>
-1. 加载 Schema → 编译校验器<br>
-2. 每条消息生成后自动扫描变量标签<br>
-3. 先执行 Initial（清空并赋值），再执行 Update（增量修改）<br>
-4. 用 Schema 校验最终状态<br><br>
-<b>插值宏：</b><code>{{message/data/变量路径}}</code> 可在提示词中引用变量值。`,
+• <b>格式规则 (Schema)</b> — 在世界书中用 <code>[Var_Schema]</code> 标签定义变量的结构、类型约束和取值范围<br>
+• <b>默认值 (Default)</b> — 在世界书中用 <code>[Var_Default]</code> 标签定义新变量的初始填充值<br>
+• <b>初始化 (Initial)</b> — 在开场白中用 <code>&lt;Var_Initial&gt;</code> 标签设定变量的起始状态<br>
+• <b>增量更新 (Update)</b> — 在消息中用 <code>&lt;Var_Update&gt;</code> 标签以 JSON Patch 格式修改变量<br><br>
+<b>自动执行流程：</b><br>
+1. 聊天开始时 → 加载世界书中的 Schema 和 Default → 编译校验器<br>
+2. 开场白生成时 → 扫描 <code>&lt;Var_Initial&gt;</code> → 建立初始变量<br>
+3. 每条消息生成后 → 扫描 <code>&lt;Var_Update&gt;</code> → 校验并执行增量修改<br>
+4. 校验失败的指令被丢弃，成功的写入当前楼层<br><br>
+<b>在提示词中引用变量：</b><br>
+<code>{{getvar::变量名}}</code> 或 <code>{{message/data/变量路径}}</code> 即可在提示词中插入变量值。`,
   },
   reloadRules: {
-    title: '重新加载格式规则',
-    content: `从世界书重新读取 <code>[Var_Schema]</code> 和 <code>[Var_Default]</code> 条目，重新编译并覆盖当前聊天中的旧规则。<br><br>
-<b>使用场景：</b>修改了世界书中的变量定义后，需要手动同步到当前聊天。<br><br>
-⚠️ 新规则只影响之后的变量校验，不会自动修改已有变量值。`,
+    title: '🔄 重新加载格式规则',
+    content: `<b>功能：</b>从世界书中重新读取 <code>[Var_Schema]</code>（结构定义）和 <code>[Var_Default]</code>（默认值），重新编译校验器并覆盖当前聊天中缓存的旧规则。<br><br>
+<b>什么时候需要用？</b><br>
+• 你刚修改了世界书中的变量定义（比如新增了一个字段、改了取值范围）<br>
+• 聊天中的变量校验报错，你怀疑是旧 Schema 导致的<br><br>
+<b>注意：</b><br>
+⚠️ 只影响之后的变量校验，不会回溯修改已有楼层的变量值。<br>
+💡 如果需要强制重算，请配合「重新解析当前楼层」或「从检查点逐层重新解析」使用。`,
   },
   reinitFromGreeting: {
-    title: '从开场白重新初始化',
-    content: `重新读取开场白消息中的 <code>&lt;Var_Initial&gt;</code> 标签，重建第 0 层的变量状态。<br><br>
-<b>使用场景：</b>修改了开场白的初始变量后，需要重新应用。`,
+    title: '📝 从开场白重新初始化',
+    content: `<b>功能：</b>重新扫描开场白（第 0 层消息）中的 <code>&lt;Var_Initial&gt;</code> 标签，清空并重建初始变量。<br><br>
+<b>什么时候需要用？</b><br>
+• 你手动编辑了开场白中的初始变量值<br>
+• 初始化时出了错，想重新执行一遍<br><br>
+<b>注意：</b><br>
+⚠️ 会清空第 0 层已有的变量数据并重新写入。<br>
+💡 不影响后续楼层的变量，若需全量修复请配合「从检查点逐层重新解析」。`,
   },
   reparseFloor: {
-    title: '重新解析当前楼层',
-    content: `清除当前最新楼层的变量数据，重新解析该楼层消息中的变量标签并执行。<br><br>
-<b>使用场景：</b>怀疑变量状态不正确时，手动重跑当前层的解析。`,
+    title: '🔁 重新解析当前楼层',
+    content: `<b>功能：</b>清除当前最新楼层的变量数据，对该楼层的消息内容重新进行标签扫描和变量更新。<br><br>
+<b>什么时候需要用？</b><br>
+• 手动编辑了最新一条消息中的 <code>&lt;Var_Update&gt;</code> 标签<br>
+• 怀疑变量状态不正确，想手动重跑一遍<br>
+• AI 输出了截断的标签，你补全后需要重新解析<br><br>
+💡 只对最新一层生效。如果需要修复多层，请使用「从检查点逐层重新解析」。`,
   },
   setCheckpoint: {
-    title: '将当前楼层设为检查点',
-    content: `将当前最新楼层标记为检查点，变量数据在自动清理时被保留。<br><br>
-<b>使用场景：</b>对话关键节点（如战斗开始、场景切换）时设定回退锚点。<br><br>
-💡 检查点配合「链式重解析」使用，可以从检查点恢复变量链。`,
+    title: '📌 将当前楼层设为检查点',
+    content: `<b>功能：</b>将当前最新楼层标记为「检查点」，该楼层的变量数据在自动清理时会被保留。<br><br>
+<b>什么时候需要用？</b><br>
+• 对话到达了一个关键节点（如战斗开始、场景切换、重要分支）<br>
+• 需要一个「存档点」以便后续回退和修复<br><br>
+<b>工作原理：</b><br>
+• 检查点是「链式重解析」的起点——从检查点开始逐层重算，恢复完整变量链<br>
+• 变量清理策略会跳过检查点楼层，确保锚点数据不丢失<br><br>
+💡 建议在每个重要剧情节点设置一个检查点，类似游戏存档。`,
   },
   reparseFromCheckpoint: {
-    title: '从上个检查点逐层重新解析',
-    content: `从最近的检查点楼层开始，依次对后续每层重新执行变量解析和更新。<br><br>
-<b>使用场景：</b>检查点之后的变量链出了问题，需要全量修复。<br><br>
-⚠️ 操作不可撤销，会覆盖检查点之后所有楼层的变量。`,
+    title: '⏩ 从检查点逐层重新解析',
+    content: `<b>功能：</b>找到最近的检查点楼层，从该检查点的下一层开始，依次对后续每一层重新执行标签扫描和变量更新。<br><br>
+<b>什么时候需要用？</b><br>
+• 发现多个楼层的变量都不对，需要从一个已知正确的状态全量修复<br>
+• 手动编辑了中间楼层的消息，需要重算后续影响<br><br>
+<b>工作原理：</b><br>
+1. 向前搜索最近的检查点楼层<br>
+2. 从检查点的下一层开始，逐层重新解析<br>
+3. 如果找不到检查点，则从第 0 层开始重算所有楼层<br><br>
+⚠️ <b>操作不可撤销！</b>会覆盖检查点之后所有楼层的变量数据。<br>
+💡 在执行前建议先确认检查点的位置是否正确。`,
   },
   notifyLevel: {
-    title: '通知等级',
-    content: `控制 toastr 弹窗和控制台输出的信息级别：<br><br>
-• <b>debug</b>：全部显示（调试+成功+警告+错误）<br>
-• <b>always</b>：成功+警告+错误<br>
-• <b>notice</b>（默认）：仅警告+错误<br>
-• <b>error</b>：仅错误<br>
-• <b>silence</b>：完全静默`,
+    title: '🔔 通知等级',
+    content: `控制 VarUpdate 弹出通知（toastr）和控制台日志的信息级别：<br><br>
+<table style="width:100%; border-collapse:collapse;">
+<tr><td style="padding:4px;"><b>debug</b></td><td style="padding:4px;">显示所有信息：调试细节 + 成功 + 警告 + 错误</td></tr>
+<tr><td style="padding:4px;"><b>always</b></td><td style="padding:4px;">显示操作结果：成功 + 警告 + 错误</td></tr>
+<tr><td style="padding:4px;"><b>notice</b></td><td style="padding:4px;">（默认）仅显示需要注意的：警告 + 错误</td></tr>
+<tr><td style="padding:4px;"><b>error</b></td><td style="padding:4px;">仅显示错误</td></tr>
+<tr><td style="padding:4px;"><b>silence</b></td><td style="padding:4px;">完全静默，不弹出任何通知</td></tr>
+</table><br>
+💡 日常使用建议 <b>notice</b>；调试问题时切换为 <b>debug</b>。`,
   },
   autoInit: {
-    title: '自动初始化',
-    content: `<b>开启</b>：创建新聊天后，自动识别开场白中的 <code>&lt;Var_Initial&gt;</code> 标签并执行初始化。<br><br>
-<b>关闭</b>：需手动点击「从开场白重新初始化」按钮触发。`,
+    title: '⚡ 自动从开场白初始化',
+    content: `<b>开启（推荐）：</b><br>
+新建聊天或切换聊天时，脚本会自动扫描开场白中的 <code>&lt;Var_Initial&gt;</code> 标签并执行变量初始化，无需手动操作。<br><br>
+<b>关闭：</b><br>
+不会自动初始化，你需要手动点击面板上的「从开场白重新初始化」按钮来触发。<br><br>
+💡 大多数情况下建议保持开启。如果你的角色卡不需要开场白初始化（比如只在后续消息中写 Update），可以关闭。`,
   },
   toleranceThreshold: {
-    title: '容错阈值',
-    content: `单次解析中被丢弃的指令数：<br><br>
-• <b>≤ 阈值</b> → 视为<b>警告</b>（变量更新完成，通知用户检查）<br>
-• <b>&gt; 阈值</b> → 视为<b>失败</b>（广播失败事件，触发 Agents 重试）<br><br>
-💡 默认值为 2，适合大多数场景。`,
+    title: '🎯 容错阈值',
+    content: `控制一次变量更新中「可接受的丢弃指令数」：<br><br>
+当 AI 输出的 <code>&lt;Var_Update&gt;</code> 中有部分指令因校验失败被丢弃时：<br>
+• 丢弃数 <b>≤ 阈值</b> → 视为<b>警告</b>：变量正常更新，但会通知你检查<br>
+• 丢弃数 <b>&gt; 阈值</b> → 视为<b>失败</b>：广播失败事件，可触发 Agents 自动重试<br><br>
+<b>建议值：</b><br>
+• <b>2</b>（默认）— 适合大多数场景，容忍少量格式错误<br>
+• <b>0</b> — 严格模式，任何指令丢弃都视为失败<br>
+• <b>5+</b> — 宽松模式，适合变量字段多、AI 容易犯错的场景`,
   },
   varLifecycle: {
-    title: '变量生命周期',
-    content: `保留最近 N 层消息的完整变量数据，超出部分自动清理以控制聊天文件体积。<br><br>
-• 被标记为<b>检查点</b>的楼层始终保留<br>
-• 清理仅删除变量数据，不影响消息内容<br><br>
-💡 建议设为 20，确保最近的对话有完整变量数据。`,
+    title: '📦 楼层变量生命周期',
+    content: `控制保留最近多少层消息的完整变量数据：<br><br>
+• 超出范围的旧楼层变量会被自动清理，以控制聊天文件体积<br>
+• 被标记为<b>检查点</b>的楼层<b>始终保留</b>，不受清理影响<br>
+• 清理只删除变量数据，<b>不影响消息内容</b><br><br>
+<b>建议值：</b><br>
+• <b>20</b>（默认）— 适合大多数场景<br>
+• <b>50+</b> — 如果你经常回看历史变量<br>
+• <b>9999</b> — 几乎不清理（注意文件体积）`,
   },
 };
 
@@ -184,11 +231,9 @@ const PANEL_CSS = `
   white-space: nowrap;
   font-size: 0.9em;
 }
-.varupdate-settings-grid .text_pole {
-  width: 100%;
-}
-.varupdate-settings-grid input[type="number"].text_pole {
-  width: 5rem;
+.varupdate-settings-grid .varupdate-compact-pole {
+  width: 6rem;
+  flex-shrink: 0;
 }
 .varupdate-help-icon {
   cursor: pointer;
@@ -199,40 +244,46 @@ const PANEL_CSS = `
 .varupdate-help-icon:hover {
   opacity: 1;
 }
+.varupdate-setting-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
 `;
 
 // ═══════════════════════════════════════════
-//  面板 HTML（参考 MVU Panel.vue template）
+//  面板 HTML
 // ═══════════════════════════════════════════
 
 const PANEL_HTML = `
 <div id="varupdate-settings" class="inline-drawer">
   <div class="inline-drawer-toggle inline-drawer-header">
-    <b>VarUpdate 变量框架</b>
+    <b>变量更新系统</b>
     <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
   </div>
   <div class="inline-drawer-content">
 
     <!-- 顶部快捷按钮区 -->
     <div class="varupdate-button-grid">
-      <div class="varupdate-btn" id="varupdate-btn-reload" title="从世界书重新读取 Schema 和 Default">
+      <div class="varupdate-btn" id="varupdate-btn-reload" title="从世界书重新读取并编译 [Var_Schema] 和 [Var_Default]，覆盖当前聊天中的旧规则">
         <i class="fa-solid fa-arrows-rotate"></i> 重新加载格式规则
       </div>
-      <div class="varupdate-btn" id="varupdate-btn-reinit" title="重新读取开场白中的 Var_Initial 标签">
+      <div class="varupdate-btn" id="varupdate-btn-reinit" title="重新扫描开场白（第0层）中的 <Var_Initial> 标签，清空并重建初始变量">
         <i class="fa-solid fa-file-import"></i> 从开场白重新初始化
       </div>
-      <div class="varupdate-btn" id="varupdate-btn-reparse" title="重新解析当前最新楼层的变量标签">
+      <div class="varupdate-btn" id="varupdate-btn-reparse" title="清除最新楼层的变量数据，重新扫描该层消息中的标签并执行更新">
         <i class="fa-solid fa-rotate-right"></i> 重新解析当前楼层
       </div>
-      <div class="varupdate-btn" id="varupdate-btn-checkpoint" title="将当前楼层设为快照锚点">
+      <div class="varupdate-btn" id="varupdate-btn-checkpoint" title="将最新楼层标记为检查点，变量清理时会保留该层数据，可作为链式重解析的起点">
         <i class="fa-solid fa-camera"></i> 将当前楼层设为检查点
       </div>
-      <div class="varupdate-btn" id="varupdate-btn-reparse-chain" title="从最近的检查点逐层重新解析">
-        <i class="fa-solid fa-play"></i> 从上个检查点逐层重新解析
+      <div class="varupdate-btn" id="varupdate-btn-reparse-chain" title="从最近的检查点开始，逐层重新扫描标签并重算变量，修复检查点之后的整条变量链">
+        <i class="fa-solid fa-play"></i> 从检查点逐层重新解析
       </div>
     </div>
 
-    <div class="varupdate-btn" id="varupdate-btn-guide" title="查看脚本使用说明" style="margin-bottom:10px;">
+    <div class="varupdate-btn" id="varupdate-btn-guide" title="查看 VarUpdate 的完整使用说明" style="margin-bottom:10px;">
       <i class="fa-solid fa-book-open"></i> 使用指南
     </div>
 
@@ -243,7 +294,7 @@ const PANEL_HTML = `
       <div class="varupdate-setting-item">
         <label for="varupdate-notify-level">通知等级</label>
         <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-notify"></i>
-        <select id="varupdate-notify-level" class="text_pole">
+        <select id="varupdate-notify-level" class="text_pole varupdate-compact-pole">
           <option value="debug">debug</option>
           <option value="always">always</option>
           <option value="notice" selected>notice</option>
@@ -252,19 +303,21 @@ const PANEL_HTML = `
         </select>
       </div>
       <div class="varupdate-setting-item">
-        <input id="varupdate-auto-init" type="checkbox" checked />
-        <label for="varupdate-auto-init">自动读取开场白</label>
-        <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-autoinit"></i>
+        <label>自动从开场白初始化</label>
+        <div class="varupdate-setting-right">
+          <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-autoinit"></i>
+          <input id="varupdate-auto-init" type="checkbox" checked />
+        </div>
       </div>
       <div class="varupdate-setting-item">
         <label for="varupdate-tolerance">容错阈值</label>
         <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-tolerance"></i>
-        <input id="varupdate-tolerance" type="number" class="text_pole" min="0" max="99" step="1" value="2" />
+        <input id="varupdate-tolerance" type="number" class="text_pole varupdate-compact-pole" min="0" max="99" step="1" value="2" />
       </div>
       <div class="varupdate-setting-item">
-        <label for="varupdate-lifecycle">生命周期</label>
+        <label for="varupdate-lifecycle">楼层变量生命周期</label>
         <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-lifecycle"></i>
-        <input id="varupdate-lifecycle" type="number" class="text_pole" min="1" max="9999" step="1" value="20" />
+        <input id="varupdate-lifecycle" type="number" class="text_pole varupdate-compact-pole" min="1" max="9999" step="1" value="20" />
         <span style="opacity:0.5; font-size:0.85em;">层</span>
       </div>
     </div>
@@ -387,7 +440,7 @@ export function registerWandButtons(): void {
     addWandMenuItem(menu, hostDoc, {
       id: 'varupdate-wand-reparse',
       icon: 'fa-solid fa-rotate-right',
-      label: '当前楼层重解析',
+      label: '重新解析当前楼层',
       onClick: () => callbacks.onReparseFloor?.(),
     });
 
@@ -470,7 +523,7 @@ function addWandMenuItem(
 function loadSettings(hostDoc: Document): void {
   try {
     const globalData = readVariables('global');
-    const s = globalData._varupdate_settings;
+    const s = globalData[CONFIG_KEY];
     if (!s) return;
 
     if (s.notifyLevel) {
@@ -496,7 +549,7 @@ function loadSettings(hostDoc: Document): void {
 function saveSettings(hostDoc: Document): void {
   try {
     const globalData = readVariables('global');
-    globalData._varupdate_settings = {
+    globalData[CONFIG_KEY] = {
       notifyLevel: notify.getLevel(),
       autoInit: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
       toleranceThreshold: parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10),
