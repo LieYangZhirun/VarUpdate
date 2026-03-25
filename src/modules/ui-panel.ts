@@ -122,34 +122,73 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
 }
 
 /**
- * 注册魔棒快捷按钮
+ * 注册魔棒工具菜单选项
  *
- * 使用酒馆助手 iframe 全局 API：
- * - appendInexistentScriptButtons() 注册按钮到输入框旁的魔棒菜单
- * - getButtonEvent() 获取按钮点击事件名
- * - eventOn() 监听按钮点击
+ * 酒馆助手的魔棒工具菜单是 `#extensionsMenu` 容器。
+ * 变量管理器/日志管理器等工具以列表项的形式存在于该容器中。
+ * 脚本通过往宿主页面的 `#extensionsMenu` 追加 DOM 元素来注册入口。
  */
 export function registerWandButtons(): void {
   try {
-    if (typeof appendInexistentScriptButtons !== 'function') return;
-
-    // 注册按钮到魔棒菜单
-    appendInexistentScriptButtons([
-      { name: '当前楼层重解析', visible: true },
-      { name: '设置变量检查点', visible: true },
-    ]);
-
-    // 绑定按钮点击事件
-    if (typeof getButtonEvent === 'function' && typeof eventOn === 'function') {
-      const reParseEvent = getButtonEvent('当前楼层重解析');
-      eventOn(reParseEvent, () => {
-        callbacks.onManualUpdate?.();
-      });
+    // 获取宿主页面的 #extensionsMenu 容器
+    const hostDoc = window.parent?.document || document;
+    const menu = hostDoc.getElementById('extensionsMenu');
+    if (!menu) {
+      notify.debug('魔棒菜单', '#extensionsMenu 未找到，跳过注册');
+      return;
     }
 
+    // 注册「当前楼层重解析」
+    addWandMenuItem(menu, hostDoc, {
+      icon: 'fa-solid fa-rotate',
+      label: '重解析当前楼层',
+      onClick: () => callbacks.onManualUpdate?.(),
+    });
+
+    // 注册「设置变量检查点」— 暂定
+    // addWandMenuItem(menu, hostDoc, {
+    //   icon: 'fa-solid fa-bookmark',
+    //   label: '设置变量检查点',
+    //   onClick: () => { /* TODO */ },
+    // });
+
   } catch (e) {
-    notify.debug('魔棒按钮', `注册失败: ${(e as Error).message}`);
+    notify.debug('魔棒菜单', `注册失败: ${(e as Error).message}`);
   }
+}
+
+/**
+ * 向魔棒菜单追加一个选项
+ */
+function addWandMenuItem(
+  menu: HTMLElement,
+  doc: Document,
+  opts: { icon: string; label: string; onClick: () => void }
+): void {
+  // 避免重复添加
+  if (menu.querySelector(`[data-varupdate="${opts.label}"]`)) return;
+
+  // 创建与酒馆助手已有菜单项相同结构的 DOM
+  const container = doc.createElement('div');
+  container.className = 'extension_container';
+  container.setAttribute('data-varupdate', opts.label);
+
+  const item = doc.createElement('div');
+  item.className = 'list-group-item flex-container flexGap5 interactable';
+  item.tabIndex = 0;
+  item.role = 'listitem';
+  item.addEventListener('click', opts.onClick);
+
+  const icon = doc.createElement('div');
+  icon.className = `fa-fw ${opts.icon} extensionsMenuExtensionButton`;
+
+  const span = doc.createElement('span');
+  span.textContent = opts.label;
+
+  item.appendChild(icon);
+  item.appendChild(span);
+  container.appendChild(item);
+  menu.appendChild(container);
 }
 
 /**
