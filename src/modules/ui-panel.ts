@@ -7,7 +7,7 @@
  * 可通过 window.parent.document 操作宿主页面 DOM。
  *
  * 本模块负责：
- * 1. 在宿主页面 #extensions_settings 中渲染设置面板
+ * 1. 在宿主页面 #extensions_settings 中渲染设置面板（inline-drawer）
  * 2. 在宿主页面 #extensionsMenu 中注册魔棒工具菜单项
  */
 
@@ -28,7 +28,7 @@ function getHostDocument(): Document {
 }
 
 // ═══════════════════════════════════════════
-//  面板 HTML 模板
+//  面板 HTML（使用 SillyTavern 标准 class）
 // ═══════════════════════════════════════════
 
 const PANEL_HTML = `
@@ -37,24 +37,32 @@ const PANEL_HTML = `
     <b>🔧 VarUpdate</b>
     <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
   </div>
-  <div class="inline-drawer-content" style="display: none;">
-    <!-- 操作按钮 -->
-    <div class="varupdate-actions" style="display: flex; gap: 5px; margin: 8px 0;">
-      <div id="varupdate-btn-init" class="menu_button" title="手动初始化变量">
-        <i class="fa-solid fa-play"></i> 初始化
+  <div class="inline-drawer-content">
+
+    <div class="section-divider">操作
+      <hr class="sysHR" />
+    </div>
+    <div class="flex-container" style="gap:5px; flex-wrap:wrap;">
+      <div id="varupdate-btn-init" class="menu_button menu_button_icon" title="手动初始化变量">
+        <i class="fa-solid fa-play"></i>
+        <small>初始化</small>
       </div>
-      <div id="varupdate-btn-update" class="menu_button" title="重解析当前楼层">
-        <i class="fa-solid fa-rotate"></i> 重解析
+      <div id="varupdate-btn-update" class="menu_button menu_button_icon" title="重解析当前楼层消息中的标签">
+        <i class="fa-solid fa-rotate"></i>
+        <small>重解析</small>
       </div>
-      <div id="varupdate-btn-reset" class="menu_button" title="重置所有变量">
-        <i class="fa-solid fa-trash-can"></i> 重置
+      <div id="varupdate-btn-reset" class="menu_button menu_button_icon" title="清空所有变量并重置缓存">
+        <i class="fa-solid fa-trash-can"></i>
+        <small>重置</small>
       </div>
     </div>
 
-    <!-- 通知等级 -->
-    <div class="flex-container" style="margin: 8px 0;">
-      <span>通知等级:</span>
-      <select id="varupdate-notify-level" class="text_pole">
+    <div class="section-divider">通知设置
+      <hr class="sysHR" />
+    </div>
+    <div class="flex-container alignItemsCenter" style="gap:8px;">
+      <label for="varupdate-notify-level">通知等级</label>
+      <select id="varupdate-notify-level" class="text_pole" style="flex:1;">
         <option value="debug">调试 (全部)</option>
         <option value="always">常规 (成功+警告+错误)</option>
         <option value="notice" selected>安静 (仅警告+错误)</option>
@@ -63,12 +71,13 @@ const PANEL_HTML = `
       </select>
     </div>
 
-    <!-- 调试区 -->
-    <div style="margin-top: 8px;">
-      <small>当前变量状态 (只读):</small>
-      <textarea id="varupdate-debug-state" readonly rows="5"
-        style="width:100%; font-family:monospace; font-size:11px; resize:vertical; margin-top:4px;"></textarea>
+    <div class="section-divider">调试
+      <hr class="sysHR" />
     </div>
+    <small>当前变量状态 (只读)</small>
+    <textarea id="varupdate-debug-state" class="text_pole" readonly rows="4"
+      style="width:100%; font-family:monospace; font-size:11px; resize:vertical; margin-top:4px;"></textarea>
+
   </div>
 </div>
 `;
@@ -95,7 +104,7 @@ let callbacks: PanelCallbacks = {};
 export function renderPanel(cbs: PanelCallbacks = {}): void {
   callbacks = cbs;
 
-  // 清除旧版本注册的快捷按钮（从脚本面板上移除）
+  // 清除旧版本注册的快捷按钮
   try {
     if (typeof replaceScriptButtons === 'function') {
       replaceScriptButtons([]);
@@ -108,7 +117,6 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
     // 防止重复注入
     if (hostDoc.getElementById('varupdate-settings')) return;
 
-    // 找到扩展设置容器
     const container = hostDoc.getElementById('extensions_settings');
     if (!container) {
       notify.debug('面板', '#extensions_settings 未找到');
@@ -123,25 +131,20 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
       container.appendChild(panel);
     }
 
-    // 绑定折叠/展开逻辑（SillyTavern 的 inline-drawer 标准行为）
+    // 绑定折叠/展开（SillyTavern inline-drawer 标准行为）
     const header = hostDoc.querySelector('#varupdate-settings .inline-drawer-toggle');
     const content = hostDoc.querySelector('#varupdate-settings .inline-drawer-content') as HTMLElement | null;
     if (header && content) {
       header.addEventListener('click', () => {
         const icon = header.querySelector('.inline-drawer-icon');
-        if (content.style.display === 'none') {
-          content.style.display = '';
-          icon?.classList.remove('down');
-          icon?.classList.add('up');
-        } else {
-          content.style.display = 'none';
-          icon?.classList.remove('up');
-          icon?.classList.add('down');
-        }
+        const isHidden = content.style.display === 'none';
+        content.style.display = isHidden ? '' : 'none';
+        icon?.classList.toggle('down', !isHidden);
+        icon?.classList.toggle('up', isHidden);
       });
     }
 
-    // 绑定按钮事件
+    // 绑定按钮
     hostDoc.getElementById('varupdate-btn-init')?.addEventListener('click', () => {
       callbacks.onManualInit?.();
     });
@@ -154,14 +157,14 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
       }
     });
 
-    // 绑定通知等级选择
+    // 绑定通知等级
     hostDoc.getElementById('varupdate-notify-level')?.addEventListener('change', (e) => {
       const level = (e.target as HTMLSelectElement).value as NotifyLevel;
       notify.setLevel(level);
       saveSettings();
     });
 
-    // 加载已保存的设置
+    // 加载设置
     loadSettings();
 
   } catch (e) {
@@ -171,9 +174,6 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
 
 /**
  * 注册魔棒工具菜单选项
- *
- * 在宿主页面 #extensionsMenu 中追加列表项，
- * 结构与酒馆助手的变量管理器/日志查看器一致。
  */
 export function registerWandButtons(): void {
   try {
@@ -184,12 +184,22 @@ export function registerWandButtons(): void {
       return;
     }
 
-    // 「重解析当前楼层」
     addWandMenuItem(menu, hostDoc, {
       id: 'varupdate-wand-reparse',
       icon: 'fa-solid fa-rotate',
       label: '重解析当前楼层',
       onClick: () => callbacks.onManualUpdate?.(),
+    });
+
+    addWandMenuItem(menu, hostDoc, {
+      id: 'varupdate-wand-reset',
+      icon: 'fa-solid fa-eraser',
+      label: '重置变量',
+      onClick: () => {
+        if (confirm('确定要重置所有变量吗？')) {
+          callbacks.onReset?.();
+        }
+      },
     });
 
   } catch (e) {
@@ -216,15 +226,11 @@ export function refreshDebugState(data: Record<string, any>): void {
 //  内部工具
 // ═══════════════════════════════════════════
 
-/**
- * 向 #extensionsMenu 追加一个菜单项
- */
 function addWandMenuItem(
   menu: HTMLElement,
   doc: Document,
   opts: { id: string; icon: string; label: string; onClick: () => void }
 ): void {
-  // 避免重复
   if (doc.getElementById(opts.id)) return;
 
   const container = doc.createElement('div');
