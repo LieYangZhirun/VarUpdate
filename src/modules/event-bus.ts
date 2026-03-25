@@ -111,10 +111,10 @@ export const EVENTS = {
   MESSAGE_COMPLETE: 'agents:message_complete',
   RETRY_REQUESTED: 'varupdate:retry_requested',
 
-  // 酒馆原生事件
-  CHAT_CHANGED: 'CHAT_CHANGED',
-  MESSAGE_RECEIVED: 'MESSAGE_RECEIVED',
-  MESSAGE_SWIPED: 'MESSAGE_SWIPED',
-  MESSAGE_EDITED: 'MESSAGE_EDITED',
-  MESSAGE_DELETED: 'MESSAGE_DELETED',
+  // 酒馆原生事件（值必须与 tavern_events 定义一致）
+  CHAT_CHANGED: 'chat_id_changed',
+  MESSAGE_RECEIVED: 'message_received',
+  MESSAGE_SWIPED: 'message_swiped',
+  MESSAGE_EDITED: 'message_edited',
+  MESSAGE_DELETED: 'message_deleted',
 } as const;
