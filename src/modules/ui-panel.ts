@@ -3,14 +3,18 @@
  *
  * 模块 9：UI 面板
  *
- * 严格按照面向用户功能卡 H-1 / H-2 / J-1 实现。
+ * 参考 MVU Panel.vue 的实现模式：
+ * - 挂载到 #extensions_settings2（酒馆助手脚本面板区域）
+ * - 使用 inline-drawer（由宿主 jQuery 自动处理折叠）
+ * - 帮助图标 fa-circle-question + callGenericPopup 弹窗
+ * - 样式通过 teleportStyle 传送到宿主 <head>
  *
- * H-1 独立面板（注入到宿主 #extensions_settings）：
- *   1. 使用指南区域 — 总指南按钮 + 各功能项旁的 ℹ️
- *   2. 操作按钮区域 — 5 个按钮
- *   3. 设置区域 — 通知等级 + 自动初始化 + 容错阈值 + 变量生命周期
+ * H-1 独立面板：
+ *   1. 使用指南按钮
+ *   2. 操作按钮 × 5（完整文本，不缩写）
+ *   3. 设置区域（通知等级 + 自动初始化 + 容错阈值 + 变量生命周期）
  *
- * H-2 魔棒快捷按钮（注入到宿主 #extensionsMenu）：
+ * H-2 魔棒快捷按钮 × 2：
  *   - 当前楼层重解析
  *   - 设置变量检查点
  */
@@ -32,138 +36,224 @@ function getHostDocument(): Document {
 }
 
 // ═══════════════════════════════════════════
-//  提示文案
+//  帮助弹窗内容（HTML 格式，参考 MVU helpTexts）
 // ═══════════════════════════════════════════
 
-const TIPS = {
-  reloadRules:
-    '从世界书重新读取 [Var_Schema] 和 [Var_Default] 条目，重新编译并覆盖当前聊天中的旧规则。\n\n使用场景：修改了世界书中的变量定义后，需要手动同步到当前聊天。',
-  reinitFromGreeting:
-    '重新读取开场白消息中的 <Var_Initial> 标签，重建第 0 层的变量状态。\n\n使用场景：修改了开场白的初始变量后需要重新生效。',
-  reparseFloor:
-    '清除当前最新楼层的变量数据，重新解析该楼层消息中的变量标签并执行。\n\n使用场景：怀疑变量状态不正确时，手动重跑当前层。',
-  setCheckpoint:
-    '将当前最新楼层标记为检查点，变量数据在自动清理时被保留。\n\n使用场景：对话关键节点（如战斗开始、场景切换）时设定回退锚点。',
-  reparseFromCheckpoint:
-    '从最近的检查点楼层开始，依次对后续每层重新执行变量解析和更新。\n\n使用场景：检查点之后的变量链出了问题，需要全量修复。',
-  notifyLevel:
-    '控制 toastr 弹窗和控制台输出的信息级别。\n• debug：全部显示\n• always：成功+警告+错误\n• notice（默认）：仅警告+错误\n• error：仅错误\n• silence：完全静默',
-  autoInit:
-    '开启时，创建新聊天后自动识别开场白中的 <Var_Initial> 标签并执行变量初始化。\n关闭时需手动点击「从开场白重新初始化」按钮。',
-  toleranceThreshold:
-    '单次解析中被丢弃的指令数 ≤ 此值 → 警告（继续）\n超过此值 → 失败（触发 Agents 重试）',
-  varLifecycle:
-    '保留最近 N 层消息的完整变量数据，超出部分自动清理以控制聊天文件体积。\n被标记为检查点的楼层始终保留。',
-  guide:
-    '📖 VarUpdate 使用指南\n\n本脚本为角色卡提供结构化变量管理能力。\n\n核心概念：\n• Schema — 在世界书 [Var_Schema] 中定义变量结构\n• Default — 在世界书 [Var_Default] 中提供默认值\n• Initial — 在消息 <Var_Initial> 中设定初始值\n• Update — 在消息 <Var_Update> 中增量修改\n\n变量数据存储在酒馆助手变量系统中，可通过变量管理器查看。\n插值宏：{{message/data/路径}} 可在提示词中引用变量值。',
+const HELP: Record<string, { title: string; content: string }> = {
+  guide: {
+    title: '📖 VarUpdate 使用指南',
+    content: `<b>VarUpdate</b> 为角色卡提供结构化变量管理能力。<br><br>
+<b>核心概念：</b><br>
+• <b>Schema</b> — 在世界书 <code>[Var_Schema]</code> 中定义变量结构和约束<br>
+• <b>Default</b> — 在世界书 <code>[Var_Default]</code> 中提供默认值<br>
+• <b>Initial</b> — 在消息 <code>&lt;Var_Initial&gt;</code> 中设定初始状态<br>
+• <b>Update</b> — 在消息 <code>&lt;Var_Update&gt;</code> 中增量修改变量<br><br>
+<b>执行流程：</b><br>
+1. 加载 Schema → 编译校验器<br>
+2. 每条消息生成后自动扫描变量标签<br>
+3. 先执行 Initial（清空并赋值），再执行 Update（增量修改）<br>
+4. 用 Schema 校验最终状态<br><br>
+<b>插值宏：</b><code>{{message/data/变量路径}}</code> 可在提示词中引用变量值。`,
+  },
+  reloadRules: {
+    title: '重新加载格式规则',
+    content: `从世界书重新读取 <code>[Var_Schema]</code> 和 <code>[Var_Default]</code> 条目，重新编译并覆盖当前聊天中的旧规则。<br><br>
+<b>使用场景：</b>修改了世界书中的变量定义后，需要手动同步到当前聊天。<br><br>
+⚠️ 新规则只影响之后的变量校验，不会自动修改已有变量值。`,
+  },
+  reinitFromGreeting: {
+    title: '从开场白重新初始化',
+    content: `重新读取开场白消息中的 <code>&lt;Var_Initial&gt;</code> 标签，重建第 0 层的变量状态。<br><br>
+<b>使用场景：</b>修改了开场白的初始变量后，需要重新应用。`,
+  },
+  reparseFloor: {
+    title: '重新解析当前楼层',
+    content: `清除当前最新楼层的变量数据，重新解析该楼层消息中的变量标签并执行。<br><br>
+<b>使用场景：</b>怀疑变量状态不正确时，手动重跑当前层的解析。`,
+  },
+  setCheckpoint: {
+    title: '将当前楼层设为检查点',
+    content: `将当前最新楼层标记为检查点，变量数据在自动清理时被保留。<br><br>
+<b>使用场景：</b>对话关键节点（如战斗开始、场景切换）时设定回退锚点。<br><br>
+💡 检查点配合「链式重解析」使用，可以从检查点恢复变量链。`,
+  },
+  reparseFromCheckpoint: {
+    title: '从上个检查点逐层重新解析',
+    content: `从最近的检查点楼层开始，依次对后续每层重新执行变量解析和更新。<br><br>
+<b>使用场景：</b>检查点之后的变量链出了问题，需要全量修复。<br><br>
+⚠️ 操作不可撤销，会覆盖检查点之后所有楼层的变量。`,
+  },
+  notifyLevel: {
+    title: '通知等级',
+    content: `控制 toastr 弹窗和控制台输出的信息级别：<br><br>
+• <b>debug</b>：全部显示（调试+成功+警告+错误）<br>
+• <b>always</b>：成功+警告+错误<br>
+• <b>notice</b>（默认）：仅警告+错误<br>
+• <b>error</b>：仅错误<br>
+• <b>silence</b>：完全静默`,
+  },
+  autoInit: {
+    title: '自动初始化',
+    content: `<b>开启</b>：创建新聊天后，自动识别开场白中的 <code>&lt;Var_Initial&gt;</code> 标签并执行初始化。<br><br>
+<b>关闭</b>：需手动点击「从开场白重新初始化」按钮触发。`,
+  },
+  toleranceThreshold: {
+    title: '容错阈值',
+    content: `单次解析中被丢弃的指令数：<br><br>
+• <b>≤ 阈值</b> → 视为<b>警告</b>（变量更新完成，通知用户检查）<br>
+• <b>&gt; 阈值</b> → 视为<b>失败</b>（广播失败事件，触发 Agents 重试）<br><br>
+💡 默认值为 2，适合大多数场景。`,
+  },
+  varLifecycle: {
+    title: '变量生命周期',
+    content: `保留最近 N 层消息的完整变量数据，超出部分自动清理以控制聊天文件体积。<br><br>
+• 被标记为<b>检查点</b>的楼层始终保留<br>
+• 清理仅删除变量数据，不影响消息内容<br><br>
+💡 建议设为 20，确保最近的对话有完整变量数据。`,
+  },
 };
 
+function showHelp(key: string): void {
+  const h = HELP[key];
+  if (!h) return;
+  try {
+    const ST = (window.parent as any)?.SillyTavern;
+    if (ST?.callGenericPopup) {
+      ST.callGenericPopup(h.content, ST.POPUP_TYPE.TEXT, '', {
+        wide: false, large: false, okButton: '了解', cancelButton: false,
+      });
+      return;
+    }
+  } catch { /* fallback */ }
+  // fallback to toastr
+  try {
+    const t = (window.parent as any)?.toastr;
+    if (t?.info) {
+      t.info(h.content.replace(/<[^>]+>/g, ''), h.title, { timeOut: 10000, closeButton: true });
+      return;
+    }
+  } catch { /* fallback */ }
+  alert(`${h.title}\n\n${h.content.replace(/<[^>]+>/g, '')}`);
+}
+
 // ═══════════════════════════════════════════
-//  面板 HTML
+//  面板 CSS（参考 MVU scoped style）
+// ═══════════════════════════════════════════
+
+const PANEL_CSS = `
+.varupdate-button-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.varupdate-btn {
+  background-color: var(--SmartThemeBlurTintColor);
+  border: 1px solid var(--SmartThemeBorderColor);
+  border-radius: 5px;
+  padding: 5px 10px;
+  text-align: center;
+  cursor: pointer;
+  flex: 1 1 45%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 0.9em;
+  transition: background-color 0.2s;
+}
+.varupdate-btn:hover {
+  background-color: var(--SmartThemeHoverColor);
+}
+.varupdate-button-grid .varupdate-btn:nth-child(n+3) {
+  flex: 1 1 30%;
+}
+.varupdate-help-icon {
+  cursor: pointer;
+  margin-left: 5px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.varupdate-help-icon:hover {
+  opacity: 1;
+}
+`;
+
+// ═══════════════════════════════════════════
+//  面板 HTML（参考 MVU Panel.vue template）
 // ═══════════════════════════════════════════
 
 const PANEL_HTML = `
 <div id="varupdate-settings" class="inline-drawer">
   <div class="inline-drawer-toggle inline-drawer-header">
-    <b>🔧 VarUpdate</b>
+    <b>VarUpdate 变量框架</b>
     <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
   </div>
   <div class="inline-drawer-content">
 
-    <!-- 使用指南 -->
-    <div class="flex-container" style="margin-bottom:4px;">
-      <div id="varupdate-btn-guide" class="menu_button menu_button_icon" title="查看使用指南">
-        <i class="fa-solid fa-book-open"></i>
-        <small>使用指南</small>
+    <!-- 顶部快捷按钮区 -->
+    <div class="varupdate-button-grid">
+      <div class="varupdate-btn" id="varupdate-btn-reload" title="从世界书重新读取 Schema 和 Default">
+        <i class="fa-solid fa-arrows-rotate"></i> 重新加载格式规则
+      </div>
+      <div class="varupdate-btn" id="varupdate-btn-reinit" title="重新读取开场白中的 Var_Initial 标签">
+        <i class="fa-solid fa-file-import"></i> 从开场白重新初始化
+      </div>
+      <div class="varupdate-btn" id="varupdate-btn-reparse" title="重新解析当前最新楼层的变量标签">
+        <i class="fa-solid fa-rotate-right"></i> 重新解析当前楼层
+      </div>
+      <div class="varupdate-btn" id="varupdate-btn-checkpoint" title="将当前楼层设为快照锚点">
+        <i class="fa-solid fa-camera"></i> 将当前楼层设为检查点
+      </div>
+      <div class="varupdate-btn" id="varupdate-btn-reparse-chain" title="从最近的检查点逐层重新解析">
+        <i class="fa-solid fa-play"></i> 从上个检查点逐层重新解析
       </div>
     </div>
 
-    <!-- 操作按钮 -->
-    <div class="section-divider">操作<hr class="sysHR" /></div>
-    <div class="flex-container" style="gap:4px; flex-wrap:wrap;">
-      <div id="varupdate-btn-reload" class="menu_button menu_button_icon" title="重新加载格式规则">
-        <i class="fa-solid fa-arrows-rotate"></i>
-        <small>加载规则</small>
-      </div>
-      <div id="varupdate-tip-reload" class="menu_button menu_button_icon" style="padding:2px 6px;" title="说明">
-        <i class="fa-solid fa-circle-info"></i>
-      </div>
-    </div>
-    <div class="flex-container" style="gap:4px; flex-wrap:wrap; margin-top:4px;">
-      <div id="varupdate-btn-reinit" class="menu_button menu_button_icon" title="从开场白重新初始化">
-        <i class="fa-solid fa-play"></i>
-        <small>初始化</small>
-      </div>
-      <div id="varupdate-tip-reinit" class="menu_button menu_button_icon" style="padding:2px 6px;" title="说明">
-        <i class="fa-solid fa-circle-info"></i>
-      </div>
-    </div>
-    <div class="flex-container" style="gap:4px; flex-wrap:wrap; margin-top:4px;">
-      <div id="varupdate-btn-reparse" class="menu_button menu_button_icon" title="重新解析当前楼层">
-        <i class="fa-solid fa-rotate"></i>
-        <small>重解析</small>
-      </div>
-      <div id="varupdate-tip-reparse" class="menu_button menu_button_icon" style="padding:2px 6px;" title="说明">
-        <i class="fa-solid fa-circle-info"></i>
-      </div>
-    </div>
-    <div class="flex-container" style="gap:4px; flex-wrap:wrap; margin-top:4px;">
-      <div id="varupdate-btn-checkpoint" class="menu_button menu_button_icon" title="将当前楼层设为检查点">
-        <i class="fa-solid fa-bookmark"></i>
-        <small>设检查点</small>
-      </div>
-      <div id="varupdate-tip-checkpoint" class="menu_button menu_button_icon" style="padding:2px 6px;" title="说明">
-        <i class="fa-solid fa-circle-info"></i>
-      </div>
-    </div>
-    <div class="flex-container" style="gap:4px; flex-wrap:wrap; margin-top:4px;">
-      <div id="varupdate-btn-reparse-chain" class="menu_button menu_button_icon" title="从上个检查点逐层重新解析">
-        <i class="fa-solid fa-forward"></i>
-        <small>链式重解析</small>
-      </div>
-      <div id="varupdate-tip-reparse-chain" class="menu_button menu_button_icon" style="padding:2px 6px;" title="说明">
-        <i class="fa-solid fa-circle-info"></i>
-      </div>
+    <div class="varupdate-btn" id="varupdate-btn-guide" title="查看脚本使用说明" style="margin-bottom:10px;">
+      <i class="fa-solid fa-book-open"></i> 使用指南
     </div>
 
-    <!-- 设置 -->
-    <div class="section-divider">设置<hr class="sysHR" /></div>
+    <hr />
 
-    <div class="flex-container alignItemsCenter" style="gap:8px; margin-top:4px;">
-      <label for="varupdate-notify-level">通知等级</label>
-      <select id="varupdate-notify-level" class="text_pole" style="flex:1;">
-        <option value="debug">debug (全部)</option>
-        <option value="always">always (成功+警告+错误)</option>
-        <option value="notice" selected>notice (仅警告+错误)</option>
-        <option value="error">error (仅错误)</option>
-        <option value="silence">silence (静默)</option>
-      </select>
-      <div id="varupdate-tip-notify" class="menu_button menu_button_icon" style="padding:2px 6px;" title="说明">
-        <i class="fa-solid fa-circle-info"></i>
+    <!-- 设置区域 -->
+    <div class="flex-container flexFlowColumn">
+      <div><strong>脚本设置</strong></div>
+
+      <div class="flex-container flexFlowColumn" style="margin-top:5px;">
+        <label for="varupdate-notify-level">
+          通知等级
+          <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-notify"></i>
+        </label>
+        <select id="varupdate-notify-level" class="text_pole">
+          <option value="debug">debug (全部)</option>
+          <option value="always">always (成功+警告+错误)</option>
+          <option value="notice" selected>notice (仅警告+错误)</option>
+          <option value="error">error (仅错误)</option>
+          <option value="silence">silence (静默)</option>
+        </select>
       </div>
-    </div>
 
-    <div class="flex-container alignItemsCenter" style="gap:8px; margin-top:4px;">
-      <input type="checkbox" id="varupdate-auto-init" checked />
-      <label for="varupdate-auto-init">自动初始化</label>
-      <div id="varupdate-tip-autoinit" class="menu_button menu_button_icon" style="padding:2px 6px; margin-left:auto;" title="说明">
-        <i class="fa-solid fa-circle-info"></i>
+      <label class="checkbox_label" for="varupdate-auto-init" style="margin-top:5px;">
+        <input id="varupdate-auto-init" type="checkbox" checked />
+        <span>自动初始化</span>
+        <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-autoinit"></i>
+      </label>
+
+      <div class="flex-container flexFlowColumn" style="margin-top:5px;">
+        <label for="varupdate-tolerance">
+          容错阈值
+          <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-tolerance"></i>
+        </label>
+        <input id="varupdate-tolerance" type="number" class="text_pole" min="0" max="99" step="1" value="2" />
       </div>
-    </div>
 
-    <div class="flex-container alignItemsCenter" style="gap:8px; margin-top:4px;">
-      <label for="varupdate-tolerance">容错阈值</label>
-      <input id="varupdate-tolerance" type="number" class="text_pole" min="0" max="99" step="1" value="2" style="width:5rem;" />
-      <div id="varupdate-tip-tolerance" class="menu_button menu_button_icon" style="padding:2px 6px;" title="说明">
-        <i class="fa-solid fa-circle-info"></i>
-      </div>
-    </div>
-
-    <div class="flex-container alignItemsCenter" style="gap:8px; margin-top:4px;">
-      <label for="varupdate-lifecycle">变量生命周期</label>
-      <input id="varupdate-lifecycle" type="number" class="text_pole" min="1" max="9999" step="1" value="20" style="width:5rem;" />
-      <div id="varupdate-tip-lifecycle" class="menu_button menu_button_icon" style="padding:2px 6px;" title="说明">
-        <i class="fa-solid fa-circle-info"></i>
+      <div class="flex-container flexFlowColumn" style="margin-top:5px;">
+        <label for="varupdate-lifecycle">
+          变量生命周期（保留楼层数）
+          <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-lifecycle"></i>
+        </label>
+        <input id="varupdate-lifecycle" type="number" class="text_pole" min="1" max="9999" step="1" value="20" />
       </div>
     </div>
 
@@ -186,6 +276,23 @@ interface PanelCallbacks {
 let callbacks: PanelCallbacks = {};
 
 // ═══════════════════════════════════════════
+//  样式传送（参考 MVU teleportStyle）
+// ═══════════════════════════════════════════
+
+function teleportStyle(): void {
+  try {
+    const hostDoc = getHostDocument();
+    const styleId = 'varupdate-teleported-style';
+    if (hostDoc.getElementById(styleId)) return;
+
+    const styleEl = hostDoc.createElement('style');
+    styleEl.id = styleId;
+    styleEl.textContent = PANEL_CSS;
+    hostDoc.head.appendChild(styleEl);
+  } catch { /* 静默 */ }
+}
+
+// ═══════════════════════════════════════════
 //  公开接口
 // ═══════════════════════════════════════════
 
@@ -203,9 +310,14 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
     const hostDoc = getHostDocument();
     if (hostDoc.getElementById('varupdate-settings')) return;
 
-    const container = hostDoc.getElementById('extensions_settings');
+    // 传送样式到宿主 <head>
+    teleportStyle();
+
+    // 挂载到 #extensions_settings2（参考 MVU）
+    const container = hostDoc.getElementById('extensions_settings2')
+      || hostDoc.getElementById('extensions_settings');
     if (!container) {
-      notify.debug('面板', '#extensions_settings 未找到');
+      notify.debug('面板', '#extensions_settings2 未找到');
       return;
     }
 
@@ -214,37 +326,22 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
     const panel = wrapper.firstElementChild;
     if (panel) container.appendChild(panel);
 
-    // 折叠/展开
-    const header = hostDoc.querySelector('#varupdate-settings .inline-drawer-toggle');
-    const content = hostDoc.querySelector('#varupdate-settings .inline-drawer-content') as HTMLElement | null;
-    if (header && content) {
-      header.addEventListener('click', () => {
-        const icon = header.querySelector('.inline-drawer-icon');
-        const isHidden = content.style.display === 'none';
-        content.style.display = isHidden ? '' : 'none';
-        icon?.classList.toggle('down', !isHidden);
-        icon?.classList.toggle('up', isHidden);
-      });
-    }
+    // ─── 不手动绑定 inline-drawer toggle ───
+    // SillyTavern 宿主的 jQuery 自动处理 inline-drawer 折叠逻辑
 
     // 操作按钮
-    bindClick(hostDoc, 'varupdate-btn-guide', () => showTip(TIPS.guide));
-    bindClick(hostDoc, 'varupdate-btn-reload', () => callbacks.onReloadRules?.());
-    bindClick(hostDoc, 'varupdate-btn-reinit', () => callbacks.onReinitFromGreeting?.());
-    bindClick(hostDoc, 'varupdate-btn-reparse', () => callbacks.onReparseFloor?.());
-    bindClick(hostDoc, 'varupdate-btn-checkpoint', () => callbacks.onSetCheckpoint?.());
-    bindClick(hostDoc, 'varupdate-btn-reparse-chain', () => callbacks.onReparseFromCheckpoint?.());
+    bind(hostDoc, 'varupdate-btn-guide', () => showHelp('guide'));
+    bind(hostDoc, 'varupdate-btn-reload', () => callbacks.onReloadRules?.());
+    bind(hostDoc, 'varupdate-btn-reinit', () => callbacks.onReinitFromGreeting?.());
+    bind(hostDoc, 'varupdate-btn-reparse', () => callbacks.onReparseFloor?.());
+    bind(hostDoc, 'varupdate-btn-checkpoint', () => callbacks.onSetCheckpoint?.());
+    bind(hostDoc, 'varupdate-btn-reparse-chain', () => callbacks.onReparseFromCheckpoint?.());
 
-    // 提示按钮
-    bindClick(hostDoc, 'varupdate-tip-reload', () => showTip(TIPS.reloadRules));
-    bindClick(hostDoc, 'varupdate-tip-reinit', () => showTip(TIPS.reinitFromGreeting));
-    bindClick(hostDoc, 'varupdate-tip-reparse', () => showTip(TIPS.reparseFloor));
-    bindClick(hostDoc, 'varupdate-tip-checkpoint', () => showTip(TIPS.setCheckpoint));
-    bindClick(hostDoc, 'varupdate-tip-reparse-chain', () => showTip(TIPS.reparseFromCheckpoint));
-    bindClick(hostDoc, 'varupdate-tip-notify', () => showTip(TIPS.notifyLevel));
-    bindClick(hostDoc, 'varupdate-tip-autoinit', () => showTip(TIPS.autoInit));
-    bindClick(hostDoc, 'varupdate-tip-tolerance', () => showTip(TIPS.toleranceThreshold));
-    bindClick(hostDoc, 'varupdate-tip-lifecycle', () => showTip(TIPS.varLifecycle));
+    // 帮助图标
+    bind(hostDoc, 'varupdate-help-notify', () => showHelp('notifyLevel'));
+    bind(hostDoc, 'varupdate-help-autoinit', () => showHelp('autoInit'));
+    bind(hostDoc, 'varupdate-help-tolerance', () => showHelp('toleranceThreshold'));
+    bind(hostDoc, 'varupdate-help-lifecycle', () => showHelp('varLifecycle'));
 
     // 设置项变更
     hostDoc.getElementById('varupdate-notify-level')?.addEventListener('change', (e) => {
@@ -256,7 +353,6 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
     hostDoc.getElementById('varupdate-tolerance')?.addEventListener('change', () => saveSettings(hostDoc));
     hostDoc.getElementById('varupdate-lifecycle')?.addEventListener('change', () => saveSettings(hostDoc));
 
-    // 加载已保存设置
     loadSettings(hostDoc);
 
   } catch (e) {
@@ -266,8 +362,6 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
 
 /**
  * H-2 魔棒快捷按钮
- * - 当前楼层重解析
- * - 设置变量检查点
  */
 export function registerWandButtons(): void {
   try {
@@ -280,14 +374,14 @@ export function registerWandButtons(): void {
 
     addWandMenuItem(menu, hostDoc, {
       id: 'varupdate-wand-reparse',
-      icon: 'fa-solid fa-rotate',
+      icon: 'fa-solid fa-rotate-right',
       label: '当前楼层重解析',
       onClick: () => callbacks.onReparseFloor?.(),
     });
 
     addWandMenuItem(menu, hostDoc, {
       id: 'varupdate-wand-checkpoint',
-      icon: 'fa-solid fa-bookmark',
+      icon: 'fa-solid fa-camera',
       label: '设置变量检查点',
       onClick: () => callbacks.onSetCheckpoint?.(),
     });
@@ -295,14 +389,6 @@ export function registerWandButtons(): void {
   } catch (e) {
     notify.debug('魔棒', `注册失败: ${(e as Error).message}`);
   }
-}
-
-/**
- * 刷新调试面板中的变量状态
- * （功能卡未定义调试区，但保留用于控制台输出）
- */
-export function refreshDebugState(data: Record<string, any>): void {
-  console.log('%c[VarUpdate] 当前变量状态:', 'color: #50C878; font-weight: bold;', data);
 }
 
 /**
@@ -325,25 +411,19 @@ export function getPanelSettings(): {
   }
 }
 
+/**
+ * 调试输出（功能卡未定义调试区，仅控制台）
+ */
+export function refreshDebugState(data: Record<string, any>): void {
+  console.log('%c[VarUpdate] 变量状态:', 'color: #50C878; font-weight: bold;', data);
+}
+
 // ═══════════════════════════════════════════
 //  内部工具
 // ═══════════════════════════════════════════
 
-function bindClick(doc: Document, id: string, handler: () => void): void {
+function bind(doc: Document, id: string, handler: () => void): void {
   doc.getElementById(id)?.addEventListener('click', handler);
-}
-
-function showTip(text: string): void {
-  try {
-    const t = typeof toastr !== 'undefined' ? toastr : (typeof parent !== 'undefined' ? (parent as any).toastr : null);
-    if (t?.info) {
-      t.info(text, '[VarUpdate]', { timeOut: 8000, extendedTimeOut: 4000, closeButton: true });
-    } else {
-      alert(text);
-    }
-  } catch {
-    alert(text);
-  }
 }
 
 function addWandMenuItem(
@@ -398,9 +478,7 @@ function loadSettings(hostDoc: Document): void {
       const inp = hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement;
       if (inp) inp.value = String(s.varLifecycle);
     }
-  } catch {
-    // 首次使用无设置
-  }
+  } catch { /* 首次使用 */ }
 }
 
 function saveSettings(hostDoc: Document): void {
@@ -413,7 +491,5 @@ function saveSettings(hostDoc: Document): void {
       varLifecycle: parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10),
     };
     writeVariables('global', globalData);
-  } catch {
-    // 静默
-  }
+  } catch { /* 静默 */ }
 }
