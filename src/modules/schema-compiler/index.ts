@@ -11,7 +11,7 @@
  * 运行时通过 CDN import schema-to-zod
  */
 
-import { parseStructuredTextSync, FormatParseError } from '../format-parser.js';
+import { parseStructuredText, FormatParseError } from '../format-parser.js';
 import * as notify from '../notification.js';
 
 // ═══════════════════════════════════════════
@@ -48,6 +48,11 @@ export interface ValidationContext {
 let schemaToZod: {
   compileSchema: (data: Record<string, any>) => CompiledSchema;
   validateWithSchema: (schema: CompiledSchema, data: Record<string, any>, ctx: ValidationContext) => ValidationResult;
+  safeParseWithContext: (
+    schema: CompiledSchema,
+    data: unknown,
+    context: ValidationContext | null
+  ) => { success: boolean; data?: any; error?: any };
 } | null = null;
 
 /**
@@ -99,7 +104,7 @@ export async function compileSchemaFromText(schemaText: string): Promise<Compile
   // 步骤 1：解析文本
   let schemaData: Record<string, any>;
   try {
-    schemaData = parseStructuredTextSync(schemaText);
+    schemaData = await parseStructuredText(schemaText);
   } catch (e) {
     if (e instanceof FormatParseError) {
       notify.error('Schema 解析失败', e.message);
@@ -174,4 +179,20 @@ export function clearCache(): void {
  */
 export function getCachedSchema(): CompiledSchema | null {
   return cachedSchema;
+}
+
+/**
+ * 绑定带 ValidationContext 的 safeParse，供 JSON Patch 逐条校验时启用 refer()。
+ * 闭包内使用传入的 schema；data 每次由调用方传入当前快照（须与 Patch 正在变异的对象为同一引用链上的读视图）。
+ */
+export async function bindSafeParseWithContext(
+  schema: CompiledSchema,
+  context: ValidationContext | undefined,
+): Promise<(data: Record<string, any>) => { success: boolean; data?: any; error?: any }> {
+  const lib = await ensureSchemaToZod();
+  const ctx = context ?? null;
+  if (typeof lib.safeParseWithContext !== 'function') {
+    return (data: Record<string, any>) => schema.validator.safeParse(data);
+  }
+  return (data: Record<string, any>) => lib.safeParseWithContext(schema, data, ctx);
 }

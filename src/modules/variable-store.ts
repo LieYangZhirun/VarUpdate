@@ -4,6 +4,8 @@
  * 模块 4：变量存储适配层
  *
  * 对酒馆助手多层变量系统的封装，提供统一的变量 CRUD 接口。
+ * 使用 iframe 全局函数 getVariables / replaceVariables（由 predefine.js 从
+ * TavernHelper._bind 解构并绑定到 iframe window）。
  *
  * 三个存储层级：
  * - global：全局设置（通知等级、容错阈值等），跨角色卡跨聊天
@@ -15,16 +17,6 @@
 
 import { getValueByPath, setValueByPath } from '../shared/path-utils.js';
 import type { StoreLayer } from '../types/index.js';
-
-// ═══════════════════════════════════════════
-//  TavernHelper API 声明
-// ═══════════════════════════════════════════
-
-declare const TavernHelper: {
-  getVariables(opts: { type: string; message_id?: number }): Record<string, any>;
-  replaceVariables(data: Record<string, any>, opts: { type: string; message_id?: number }): void;
-  [key: string]: any;
-};
 
 // ═══════════════════════════════════════════
 //  深拷贝
@@ -49,8 +41,8 @@ function deepClone<T>(obj: T): T {
  */
 export function readVariables(layer: StoreLayer, messageIndex?: number): Record<string, any> {
   try {
-    const opts = buildOpts(layer, messageIndex);
-    const data = TavernHelper.getVariables(opts);
+    const option = buildOption(layer, messageIndex);
+    const data = getVariables(option);
     return deepClone(data || {});
   } catch {
     return {};
@@ -61,8 +53,8 @@ export function readVariables(layer: StoreLayer, messageIndex?: number): Record<
  * 写入指定层的变量（全量替换）
  */
 export function writeVariables(layer: StoreLayer, data: Record<string, any>, messageIndex?: number): void {
-  const opts = buildOpts(layer, messageIndex);
-  TavernHelper.replaceVariables(deepClone(data), opts);
+  const option = buildOption(layer, messageIndex);
+  replaceVariables(deepClone(data), option);
 }
 
 /**
@@ -83,12 +75,11 @@ export function setByPath(layer: StoreLayer, path: string, value: any, messageIn
 }
 
 /**
- * 清除指定消息索引之后的所有 message 层变量
- * 用于检查点切换或消息删除时的旧数据清理
+ * 清除「严格大于 messageIndex」的每条消息的 message 层变量（仍存在的消息下标）
+ * 用于 varupdate:retry_requested：保留 messageIndex 及之前，清空其后。
  */
 export function clearMessageVariablesAfter(messageIndex: number): void {
   try {
-    // 获取当前聊天的消息数量（通过 SillyTavern.getContext 或直接操作 chat[]）
     const context = (globalThis as any).SillyTavern?.getContext?.();
     if (!context?.chat) return;
 
@@ -100,14 +91,33 @@ export function clearMessageVariablesAfter(messageIndex: number): void {
   }
 }
 
+/** 酒馆在 splice 后仍可能残留高下标槽位时的清扫宽度 */
+const ORPHAN_MESSAGE_VAR_SWEEP = 256;
+
+/**
+ * SillyTavern `message_deleted` 传入的是**删除后**的 `chat.length`（见 script.js emit），
+ * 不是被删消息的下标。有效下标为 0..length-1，需清空 length 及以上可能残留的 message 变量槽位。
+ */
+export function pruneOrphanMessageVariables(newChatLength: number): void {
+  try {
+    const end = newChatLength + ORPHAN_MESSAGE_VAR_SWEEP;
+    for (let i = newChatLength; i < end; i++) {
+      writeVariables('message', {}, i);
+    }
+  } catch {
+    // 静默
+  }
+}
+
 // ═══════════════════════════════════════════
 //  内部工具
 // ═══════════════════════════════════════════
 
-function buildOpts(layer: StoreLayer, messageIndex?: number) {
-  const opts: { type: string; message_id?: number } = { type: layer };
-  if (layer === 'message' && messageIndex !== undefined) {
-    opts.message_id = messageIndex;
+function buildOption(layer: StoreLayer, messageIndex?: number): VariableOption {
+  if (layer === 'message') {
+    return messageIndex !== undefined
+      ? { type: 'message', message_id: messageIndex }
+      : { type: 'message', message_id: 'latest' as const };
   }
-  return opts;
+  return { type: layer };
 }

@@ -5,22 +5,22 @@
  */
 
 // ═══════════════════════════════════════════
-//  iframe 全局变量声明
+//  iframe 全局变量声明（由酒馆助手 predefine.js 注入）
 // ═══════════════════════════════════════════
 
-/** lodash（酒馆助手 iframe 全局注入） */
+/** lodash */
 declare const _: typeof import('lodash');
 
-/** js-yaml（酒馆助手 iframe 全局注入） */
+/** js-yaml */
 declare const YAML: {
   load(input: string, options?: any): any;
   dump(input: any, options?: any): string;
 };
 
-/** Zod（酒馆助手 iframe 全局注入） */
+/** Zod */
 declare const z: typeof import('zod');
 
-/** toastr 通知弹窗（酒馆助手 iframe 全局注入） */
+/** toastr 通知弹窗 */
 declare const toastr: {
   success(message: string, title?: string, options?: any): void;
   error(message: string, title?: string, options?: any): void;
@@ -28,19 +28,74 @@ declare const toastr: {
   info(message: string, title?: string, options?: any): void;
 };
 
-/** jQuery（酒馆助手 iframe 全局注入） */
+/** jQuery */
 declare const $: any;
 
 // ═══════════════════════════════════════════
-//  酒馆助手 API 声明
+//  酒馆助手事件 API（从 TavernHelper._bind 解构到 iframe window）
 // ═══════════════════════════════════════════
 
 declare function eventEmit(eventName: string, ...args: any[]): Promise<void>;
 declare function eventOn(eventName: string, handler: Function): { stop: () => void };
 declare function eventOnce(eventName: string, handler: Function): { stop: () => void };
 declare function eventClearAll(): void;
+declare function eventRemoveListener(eventName: string, handler: Function): void;
 
-// ── 脚本按钮 API ──
+// ═══════════════════════════════════════════
+//  酒馆助手变量 API（从 TavernHelper._bind 解构到 iframe window）
+// ═══════════════════════════════════════════
+
+type VariableOption =
+  | { type: 'global' }
+  | { type: 'chat' }
+  | { type: 'character' }
+  | { type: 'preset' }
+  | { type: 'message'; message_id?: number | 'latest' }
+  | { type: 'script'; script_id?: string }
+  | { type: 'extension'; extension_id: string };
+
+/** 读取指定作用域的变量（返回深拷贝） */
+declare function getVariables(option?: VariableOption): Record<string, any>;
+
+/** 全量替换指定作用域的变量 */
+declare function replaceVariables(variables: Record<string, any>, option?: VariableOption): void;
+
+/** 用 updater 函数读取→修改→写回变量 */
+declare function updateVariablesWith(
+  updater: (variables: Record<string, any>) => Record<string, any>,
+  option?: VariableOption
+): Record<string, any>;
+
+/** 合并写入变量（已有键保留，新键插入） */
+declare function insertOrAssignVariables(
+  variables: Record<string, any>,
+  option?: VariableOption
+): Record<string, any>;
+
+/** 获取合并后的全层变量表 */
+declare function getAllVariables(): Record<string, any>;
+
+// ═══════════════════════════════════════════
+//  酒馆助手宏注册 API
+// ═══════════════════════════════════════════
+
+interface MacroLikeContext {
+  message_id?: number;
+  role?: 'user' | 'assistant' | 'system';
+}
+
+/** 注册自定义插值宏，iframe pagehide 时自动注销 */
+declare function registerMacroLike(
+  regex: RegExp,
+  replace: (context: MacroLikeContext, substring: string, ...args: any[]) => string,
+): { unregister: () => void };
+
+/** 手动注销宏 */
+declare function unregisterMacroLike(regex: RegExp): void;
+
+// ═══════════════════════════════════════════
+//  酒馆助手脚本按钮 API
+// ═══════════════════════════════════════════
 
 interface ScriptButton {
   name: string;
@@ -65,15 +120,6 @@ export type StoreLayer = 'global' | 'chat' | 'message';
 
 /** 通知等级 */
 export type NotifyLevel = 'debug' | 'always' | 'notice' | 'error' | 'silence';
-
-/** 通知等级数值映射 */
-export const NOTIFY_LEVEL_VALUES: Record<NotifyLevel, number> = {
-  debug: 0,
-  always: 1,
-  notice: 2,
-  error: 3,
-  silence: 4,
-};
 
 // ─── 标签提取 ───
 

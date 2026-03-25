@@ -74,19 +74,12 @@ export function once(eventName: string, handler: (payload: any) => void): { stop
 
 /**
  * 注销所有由本脚本注册的事件监听器
- * 在脚本卸载时调用
+ *
+ * 使用 eventClearAll 一次性清理本 iframe 的所有监听器。
+ * 该函数是酒馆助手绑定到当前 iframe 的，只会清理本 iframe 注册的监听。
  */
 export function removeAll(): void {
-  for (const listener of registeredListeners) {
-    try {
-      listener.stop();
-    } catch {
-      // 忽略清理错误
-    }
-  }
   registeredListeners.length = 0;
-
-  // 额外调用酒馆助手的全局清理（如果可用）
   try {
     if (typeof eventClearAll === 'function') {
       eventClearAll();
@@ -107,9 +100,11 @@ export const EVENTS = {
   UPDATE_FAILED: 'varupdate:update_failed',
   SCHEMA_READY: 'varupdate:schema_ready',
 
-  // VarUpdate 监听
+  // VarUpdate 监听（来自 Agents）
   MESSAGE_COMPLETE: 'agents:message_complete',
   RETRY_REQUESTED: 'varupdate:retry_requested',
+  PIPELINE_STARTED: 'agents:pipeline_started',
+  PIPELINE_ENDED: 'agents:pipeline_ended',
 
   // 酒馆原生事件（值必须与 tavern_events 定义一致）
   CHAT_CHANGED: 'chat_id_changed',

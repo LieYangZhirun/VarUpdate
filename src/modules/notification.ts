@@ -9,7 +9,15 @@
  */
 
 import type { NotifyLevel } from '../types/index.js';
-import { NOTIFY_LEVEL_VALUES } from '../types/index.js';
+
+/** 通知等级数值映射（用于比较：当前等级 >= 消息等级时才输出） */
+const NOTIFY_LEVEL_VALUES: Record<NotifyLevel, number> = {
+  debug: 0,
+  always: 1,
+  notice: 2,
+  error: 3,
+  silence: 4,
+};
 
 // ═══════════════════════════════════════════
 //  模块状态
@@ -95,6 +103,20 @@ export function error(title: string, message: string = ''): void {
 
   logToConsole('error', title, message);
   showToastr('error', title, message);
+}
+
+/**
+ * 用户操作反馈（接口与契约 模块8）
+ *
+ * 始终弹窗，不受通知等级限制（silence 除外）。
+ * 用于用户主动点击按钮后的结果反馈。
+ */
+export function feedback(success: boolean, title: string, message: string = ''): void {
+  if (currentLevel === 'silence') return;
+
+  const type = success ? 'success' : 'error';
+  logToConsole(type, title, message);
+  showToastr(type, title, message);
 }
 
 /**

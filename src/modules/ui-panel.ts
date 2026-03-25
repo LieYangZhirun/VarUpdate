@@ -61,7 +61,7 @@ const HELP: Record<string, { title: string; content: string }> = {
 3. 每条消息生成后 → 扫描 <code>&lt;Var_Update&gt;</code> → 校验并执行增量修改<br>
 4. 校验失败的指令被丢弃，成功的写入当前楼层<br><br>
 <b>在提示词中引用变量：</b><br>
-<code>{{getvar::变量名}}</code> 或 <code>{{message/data/变量路径}}</code> 即可在提示词中插入变量值。`,
+使用 <code>{{message/data/变量路径}}</code> 即可在提示词中插入变量值。例如 <code>{{message/data/角色/HP}}</code> → 80。`,
   },
   reloadRules: {
     title: '🔄 重新加载格式规则',
@@ -425,6 +425,9 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
 
 /**
  * H-2 魔棒快捷按钮
+ *
+ * 通过 Teleport 到 #extensionsMenu（与酒馆助手 Toolbox.vue 同模式）
+ * 向魔棒弹出菜单注入自定义条目。
  */
 export function registerWandButtons(): void {
   try {
@@ -458,19 +461,19 @@ export function registerWandButtons(): void {
  * 读取面板中的设置值
  */
 export function getPanelSettings(): {
-  autoInit: boolean;
-  toleranceThreshold: number;
-  varLifecycle: number;
+  autoInitialize: boolean;
+  discardThreshold: number;
+  retentionDepth: number;
 } {
   try {
     const hostDoc = getHostDocument();
     return {
-      autoInit: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
-      toleranceThreshold: parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10),
-      varLifecycle: parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10),
+      autoInitialize: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
+      discardThreshold: parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10),
+      retentionDepth: parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10),
     };
   } catch {
-    return { autoInit: true, toleranceThreshold: 2, varLifecycle: 20 };
+    return { autoInitialize: true, discardThreshold: 2, retentionDepth: 20 };
   }
 }
 
@@ -529,17 +532,17 @@ function loadSettings(hostDoc: Document): void {
       const sel = hostDoc.getElementById('varupdate-notify-level') as HTMLSelectElement;
       if (sel) sel.value = s.notifyLevel;
     }
-    if (s.autoInit !== undefined) {
+    if (s.autoInitialize !== undefined) {
       const cb = hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement;
-      if (cb) cb.checked = s.autoInit;
+      if (cb) cb.checked = s.autoInitialize;
     }
-    if (s.toleranceThreshold !== undefined) {
+    if (s.discardThreshold !== undefined) {
       const inp = hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement;
-      if (inp) inp.value = String(s.toleranceThreshold);
+      if (inp) inp.value = String(s.discardThreshold);
     }
-    if (s.varLifecycle !== undefined) {
+    if (s.retentionDepth !== undefined) {
       const inp = hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement;
-      if (inp) inp.value = String(s.varLifecycle);
+      if (inp) inp.value = String(s.retentionDepth);
     }
   } catch { /* 首次使用 */ }
 }
@@ -549,9 +552,9 @@ function saveSettings(hostDoc: Document): void {
     const globalData = readVariables('global');
     globalData[CONFIG_KEY] = {
       notifyLevel: notify.getLevel(),
-      autoInit: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
-      toleranceThreshold: parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10),
-      varLifecycle: parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10),
+      autoInitialize: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
+      discardThreshold: parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10),
+      retentionDepth: parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10),
     };
     writeVariables('global', globalData);
   } catch { /* 静默 */ }

@@ -13,7 +13,8 @@ import { resolvePath } from './path-resolver.js';
 import { executeInstructions } from './executor.js';
 import * as notify from '../notification.js';
 import type { PatchInstruction, UpdateResult } from '../../types/index.js';
-import type { CompiledSchema, ValidationContext, ValidationResult } from '../schema-compiler/index.js';
+import { bindSafeParseWithContext } from '../schema-compiler/index.js';
+import type { CompiledSchema, ValidationContext } from '../schema-compiler/index.js';
 
 // ═══════════════════════════════════════════
 //  CDN 模块加载
@@ -42,22 +43,20 @@ async function ensureFlexibleJsonPatch() {
 // ═══════════════════════════════════════════
 
 /**
- * 解析并执行一组更新指令
+ * 解析并执行一组更新指令（接口与契约 模块3）
  *
  * 三层管道：预处理 → 路径解析 → 执行校验
  *
  * @param rawText <Var_Update> 标签内的原始文本
  * @param currentData 当前变量状态的深拷贝
- * @param schema 已编译的 Schema（可选）
- * @param validateFn 校验函数（可选）
- * @param context 校验上下文（可选）
+ * @param schema 已编译的 Schema（可选，用于逐条校验）
+ * @param context 校验上下文（可选，供 refer()；内部会绑定为 safeParseWithContext）
  * @returns 执行结果
  */
 export async function executeUpdate(
   rawText: string,
   currentData: Record<string, any>,
   schema?: CompiledSchema,
-  validateFn?: (schema: CompiledSchema, data: Record<string, any>, ctx: ValidationContext) => ValidationResult,
   context?: ValidationContext
 ): Promise<UpdateResult> {
 
@@ -67,13 +66,9 @@ export async function executeUpdate(
   try {
     parseResult = lib.parseInstructions(rawText);
   } catch (e) {
+    // F-2: 整段解析失败 → 抛出异常，由 handleUpdate 广播 UPDATE_FAILED
     notify.error('指令解析失败', (e as Error).message);
-    return {
-      data: currentData,
-      appliedCount: 0,
-      discarded: [],
-      log: {},
-    };
+    throw e;
   }
 
   // 记录预处理丢弃的条目
@@ -124,13 +119,17 @@ export async function executeUpdate(
     };
   }
 
-  // ═══ 第三层：执行与校验 ═══
+  // ═══ 第三层：执行与校验（带 refer 时需 bindSafeParseWithContext） ═══
+  let safeParseBound: ((d: Record<string, any>) => { success: boolean; data?: any; error?: any }) | undefined;
+  if (schema) {
+    safeParseBound = await bindSafeParseWithContext(schema, context);
+  }
+
   const execResult = executeInstructions(
     resolvedInstructions,
     currentData,
     schema,
-    validateFn,
-    context
+    safeParseBound,
   );
 
   // 合并丢弃记录
@@ -151,16 +150,14 @@ export async function executeUpdate(
 /**
  * 同步版本：直接接受已解析的指令数组（跳过第一层）
  *
- * 用于测试或已经预处理完的场景
+ * 用于测试或已经预处理完的场景。若需 refer()，请传入已由 bindSafeParseWithContext 得到的解析函数。
  */
 export function executeUpdateSync(
   instructions: PatchInstruction[],
   currentData: Record<string, any>,
   schema?: CompiledSchema,
-  validateFn?: (schema: CompiledSchema, data: Record<string, any>, ctx: ValidationContext) => ValidationResult,
-  context?: ValidationContext
+  safeParseWithContext?: (data: Record<string, any>) => { success: boolean; data?: any; error?: any },
 ): UpdateResult {
-  // 第二层：反向路径解析
   const resolvedInstructions: PatchInstruction[] = [];
   const pathDiscarded: Array<{ instruction: PatchInstruction; reason: string }> = [];
 
@@ -173,8 +170,7 @@ export function executeUpdateSync(
     }
   }
 
-  // 第三层：执行
-  const execResult = executeInstructions(resolvedInstructions, currentData, schema, validateFn, context);
+  const execResult = executeInstructions(resolvedInstructions, currentData, schema, safeParseWithContext);
   execResult.discarded = [...pathDiscarded, ...execResult.discarded];
   return execResult;
 }
