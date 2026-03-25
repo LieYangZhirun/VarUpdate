@@ -21,10 +21,8 @@ import type { StoreLayer } from '../types/index.js';
 // ═══════════════════════════════════════════
 
 declare const TavernHelper: {
-  variables: {
-    getVariables(opts: { type: string; messageId?: number }): Record<string, any>;
-    replaceVariables(data: Record<string, any>, opts: { type: string; messageId?: number }): void;
-  };
+  getVariables(opts: { type: string; message_id?: number }): Record<string, any>;
+  replaceVariables(data: Record<string, any>, opts: { type: string; message_id?: number }): void;
   [key: string]: any;
 };
 
@@ -52,7 +50,7 @@ function deepClone<T>(obj: T): T {
 export function readVariables(layer: StoreLayer, messageIndex?: number): Record<string, any> {
   try {
     const opts = buildOpts(layer, messageIndex);
-    const data = TavernHelper.variables.getVariables(opts);
+    const data = TavernHelper.getVariables(opts);
     return deepClone(data || {});
   } catch {
     return {};
@@ -64,7 +62,7 @@ export function readVariables(layer: StoreLayer, messageIndex?: number): Record<
  */
 export function writeVariables(layer: StoreLayer, data: Record<string, any>, messageIndex?: number): void {
   const opts = buildOpts(layer, messageIndex);
-  TavernHelper.variables.replaceVariables(deepClone(data), opts);
+  TavernHelper.replaceVariables(deepClone(data), opts);
 }
 
 /**
@@ -107,9 +105,9 @@ export function clearMessageVariablesAfter(messageIndex: number): void {
 // ═══════════════════════════════════════════
 
 function buildOpts(layer: StoreLayer, messageIndex?: number) {
-  const opts: { type: string; messageId?: number } = { type: layer };
+  const opts: { type: string; message_id?: number } = { type: layer };
   if (layer === 'message' && messageIndex !== undefined) {
-    opts.messageId = messageIndex;
+    opts.message_id = messageIndex;
   }
   return opts;
 }
