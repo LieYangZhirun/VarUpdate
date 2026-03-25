@@ -40,6 +40,22 @@ declare function eventOn(eventName: string, handler: Function): { stop: () => vo
 declare function eventOnce(eventName: string, handler: Function): { stop: () => void };
 declare function eventClearAll(): void;
 
+// ── 脚本按钮 API ──
+
+interface ScriptButton {
+  name: string;
+  visible: boolean;
+}
+
+/** 在魔棒菜单末尾追加不存在的按钮（不重复） */
+declare function appendInexistentScriptButtons(buttons: ScriptButton[]): void;
+/** 获取按钮对应的事件类型名 */
+declare function getButtonEvent(button_name: string): string;
+/** 获取当前脚本的按钮列表 */
+declare function getScriptButtons(): ScriptButton[];
+/** 完全替换脚本的按钮列表 */
+declare function replaceScriptButtons(buttons: ScriptButton[]): void;
+
 // ═══════════════════════════════════════════
 //  VarUpdate 内部类型
 // ═══════════════════════════════════════════

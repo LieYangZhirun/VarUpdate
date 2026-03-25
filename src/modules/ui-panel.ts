@@ -123,20 +123,25 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
 
 /**
  * 注册魔棒快捷按钮
+ *
+ * 使用酒馆助手 iframe 全局 API：
+ * - appendInexistentScriptButtons() 注册按钮到输入框旁的魔棒菜单
+ * - getButtonEvent() 获取按钮点击事件名
+ * - eventOn() 监听按钮点击
  */
 export function registerWandButtons(): void {
   try {
-    const TH = (globalThis as any).TavernHelper;
-    if (!TH?._bind?._appendInexistentScriptButtons) return;
+    if (typeof appendInexistentScriptButtons !== 'function') return;
 
-    TH._bind._appendInexistentScriptButtons.call(window, [
-      { name: 'VarUpdate: 当前楼层重解析', visible: true },
-      { name: 'VarUpdate: 设置变量检查点', visible: true },
+    // 注册按钮到魔棒菜单
+    appendInexistentScriptButtons([
+      { name: '当前楼层重解析', visible: true },
+      { name: '设置变量检查点', visible: true },
     ]);
 
-    // 绑定按钮事件
-    const reParseEvent = TH._bind._getButtonEvent?.call(window, 'VarUpdate: 当前楼层重解析');
-    if (reParseEvent && typeof eventOn === 'function') {
+    // 绑定按钮点击事件
+    if (typeof getButtonEvent === 'function' && typeof eventOn === 'function') {
+      const reParseEvent = getButtonEvent('当前楼层重解析');
       eventOn(reParseEvent, () => {
         callbacks.onManualUpdate?.();
       });
