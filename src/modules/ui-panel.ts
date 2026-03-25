@@ -95,6 +95,13 @@ let callbacks: PanelCallbacks = {};
 export function renderPanel(cbs: PanelCallbacks = {}): void {
   callbacks = cbs;
 
+  // 清除旧版本注册的快捷按钮（从脚本面板上移除）
+  try {
+    if (typeof replaceScriptButtons === 'function') {
+      replaceScriptButtons([]);
+    }
+  } catch { /* 静默 */ }
+
   try {
     const hostDoc = getHostDocument();
 
