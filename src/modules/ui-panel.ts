@@ -169,9 +169,30 @@ const PANEL_CSS = `
 .varupdate-button-grid .varupdate-btn:nth-child(n+3) {
   flex: 1 1 30%;
 }
+.varupdate-settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 5px;
+}
+.varupdate-settings-grid .varupdate-setting-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.varupdate-settings-grid label {
+  white-space: nowrap;
+  font-size: 0.9em;
+}
+.varupdate-settings-grid .text_pole {
+  width: 100%;
+}
+.varupdate-settings-grid input[type="number"].text_pole {
+  width: 5rem;
+}
 .varupdate-help-icon {
   cursor: pointer;
-  margin-left: 5px;
+  margin-left: 3px;
   opacity: 0.6;
   transition: opacity 0.2s;
 }
@@ -217,39 +238,34 @@ const PANEL_HTML = `
 
     <hr />
 
-    <!-- 设置区域 -->
-    <div class="flex-container flexFlowColumn">
-      <div><strong>脚本设置</strong></div>
-
-      <div class="flex-container alignItemsCenter" style="margin-top:8px; gap:8px;">
-        <label for="varupdate-notify-level" style="white-space:nowrap;">通知等级</label>
-        <select id="varupdate-notify-level" class="text_pole" style="flex:1;">
-          <option value="debug">debug (全部)</option>
-          <option value="always">always (成功+警告+错误)</option>
-          <option value="notice" selected>notice (仅警告+错误)</option>
-          <option value="error">error (仅错误)</option>
-          <option value="silence">silence (静默)</option>
-        </select>
+    <!-- 设置区域 (2x2 grid) -->
+    <div class="varupdate-settings-grid">
+      <div class="varupdate-setting-item">
+        <label for="varupdate-notify-level">通知等级</label>
         <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-notify"></i>
+        <select id="varupdate-notify-level" class="text_pole">
+          <option value="debug">debug</option>
+          <option value="always">always</option>
+          <option value="notice" selected>notice</option>
+          <option value="error">error</option>
+          <option value="silence">silence</option>
+        </select>
       </div>
-
-      <label class="checkbox_label" for="varupdate-auto-init" style="margin-top:5px;">
+      <div class="varupdate-setting-item">
         <input id="varupdate-auto-init" type="checkbox" checked />
-        <span>自动初始化</span>
+        <label for="varupdate-auto-init">自动读取开场白</label>
         <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-autoinit"></i>
-      </label>
-
-      <div class="flex-container alignItemsCenter" style="margin-top:5px; gap:8px;">
-        <label for="varupdate-tolerance" style="white-space:nowrap;">容错阈值</label>
-        <input id="varupdate-tolerance" type="number" class="text_pole" min="0" max="99" step="1" value="2" style="width:5rem;" />
-        <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-tolerance"></i>
       </div>
-
-      <div class="flex-container alignItemsCenter" style="margin-top:5px; gap:8px;">
-        <label for="varupdate-lifecycle" style="white-space:nowrap;">变量生命周期</label>
-        <input id="varupdate-lifecycle" type="number" class="text_pole" min="1" max="9999" step="1" value="20" style="width:5rem;" />
-        <span style="opacity:0.5; font-size:0.85em;">层</span>
+      <div class="varupdate-setting-item">
+        <label for="varupdate-tolerance">容错阈值</label>
+        <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-tolerance"></i>
+        <input id="varupdate-tolerance" type="number" class="text_pole" min="0" max="99" step="1" value="2" />
+      </div>
+      <div class="varupdate-setting-item">
+        <label for="varupdate-lifecycle">生命周期</label>
         <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-lifecycle"></i>
+        <input id="varupdate-lifecycle" type="number" class="text_pole" min="1" max="9999" step="1" value="20" />
+        <span style="opacity:0.5; font-size:0.85em;">层</span>
       </div>
     </div>
 
