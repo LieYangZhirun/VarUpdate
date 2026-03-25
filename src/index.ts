@@ -274,19 +274,107 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
 }
 
 // ═══════════════════════════════════════════
-//  Schema 管理
+//  Schema / Default 管理（从世界书加载）
 // ═══════════════════════════════════════════
 
+/**
+ * 从世界书扫描 [Var_Schema] 和 [Var_Default] 条目
+ * 并存入 chat 层
+ */
+async function loadSchemaAndDefaultFromWorldBook(): Promise<void> {
+  try {
+    // 获取角色主世界书名
+    const lorebookName = (globalThis as any).getCurrentCharPrimaryLorebook?.();
+    if (!lorebookName) {
+      notify.debug('世界书', '未找到角色主世界书');
+      return;
+    }
+
+    // 读取世界书所有条目
+    const entries = await (globalThis as any).getLorebookEntries(lorebookName);
+    if (!entries || !Array.isArray(entries)) {
+      notify.debug('世界书', `无法读取世界书: ${lorebookName}`);
+      return;
+    }
+
+    let schemaText: string | null = null;
+    let defaultText: string | null = null;
+
+    for (const entry of entries) {
+      const comment: string = entry.comment || '';
+      if (comment.includes('[Var_Schema]')) {
+        schemaText = entry.content || '';
+        // 去除 code block 包裹（如 ```yaml ... ```）
+        const codeMatch = schemaText.trim().match(/```.*\n([\s\S]*)\n```/m);
+        if (codeMatch) schemaText = codeMatch[1];
+      }
+      if (comment.includes('[Var_Default]')) {
+        defaultText = entry.content || '';
+        const codeMatch = defaultText.trim().match(/```.*\n([\s\S]*)\n```/m);
+        if (codeMatch) defaultText = codeMatch[1];
+      }
+    }
+
+    // 存入 chat 层
+    const chatData = readVariables('chat');
+
+    if (schemaText) {
+      chatData._schema_text = schemaText;
+      notify.debug('世界书', `找到 [Var_Schema]（${schemaText.length} 字符）`);
+    }
+    if (defaultText) {
+      chatData._default_text = defaultText;
+      notify.debug('世界书', `找到 [Var_Default]（${defaultText.length} 字符）`);
+    }
+
+    if (schemaText || defaultText) {
+      writeVariables('chat', chatData);
+    }
+
+    // 编译 Schema
+    if (schemaText) {
+      const compiled = await compileSchemaFromText(schemaText);
+      notify.success('Schema', `编译成功，定义了 ${compiled.defNames.length} 个结构体`);
+      await eventBus.emit(EVENTS.SCHEMA_READY, {
+        defNames: compiled.defNames,
+      });
+    }
+
+    // 解析 Default
+    if (defaultText) {
+      try {
+        const defaultData = parseStructuredTextSync(defaultText);
+        chatData._default_data = defaultData;
+        writeVariables('chat', chatData);
+        notify.success('Default', `加载了 ${Object.keys(defaultData).length} 个默认值`);
+      } catch (e) {
+        notify.error('Default 解析失败', (e as Error).message);
+      }
+    }
+
+  } catch (e) {
+    notify.error('世界书加载失败', (e as Error).message);
+  }
+}
+
+/**
+ * 尝试从 chat 层缓存加载 Schema（切换聊天时调用）
+ * 如果缓存为空则触发世界书扫描
+ */
 async function loadSchema(): Promise<void> {
   try {
     const chatData = readVariables('chat');
     const schemaText = chatData._schema_text;
-    if (!schemaText) return;
-
-    const compiled = await compileSchemaFromText(schemaText);
-    await eventBus.emit(EVENTS.SCHEMA_READY, {
-      defNames: compiled.defNames,
-    });
+    if (schemaText) {
+      // chat 层有缓存，直接编译
+      const compiled = await compileSchemaFromText(schemaText);
+      await eventBus.emit(EVENTS.SCHEMA_READY, {
+        defNames: compiled.defNames,
+      });
+      return;
+    }
+    // 缓存为空，从世界书加载
+    await loadSchemaAndDefaultFromWorldBook();
   } catch (e) {
     notify.error('Schema 加载失败', (e as Error).message);
   }
@@ -303,8 +391,14 @@ async function loadSchema(): Promise<void> {
 async function handleReloadRules(): Promise<void> {
   notify.debug('手动操作', '重新加载格式规则');
   clearCache();
-  await loadSchema();
-  // TODO: 也加载 Default
+  // 清除旧缓存
+  const chatData = readVariables('chat');
+  delete chatData._schema_text;
+  delete chatData._default_text;
+  delete chatData._default_data;
+  writeVariables('chat', chatData);
+  // 从世界书重新加载
+  await loadSchemaAndDefaultFromWorldBook();
   notify.success('格式规则', '已从世界书重新加载');
 }
 
