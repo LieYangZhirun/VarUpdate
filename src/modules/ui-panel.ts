@@ -117,7 +117,8 @@ function showHelp(key: string): void {
   const h = HELP[key];
   if (!h) return;
   try {
-    const ST = (window.parent as any)?.SillyTavern;
+    // SillyTavern 是酒馆助手注入到 iframe 的直接全局变量
+    const ST = (globalThis as any).SillyTavern;
     if (ST?.callGenericPopup) {
       ST.callGenericPopup(h.content, ST.POPUP_TYPE.TEXT, '', {
         wide: false, large: false, okButton: '了解', cancelButton: false,
@@ -127,7 +128,7 @@ function showHelp(key: string): void {
   } catch { /* fallback */ }
   // fallback to toastr
   try {
-    const t = (window.parent as any)?.toastr;
+    const t = (globalThis as any).toastr;
     if (t?.info) {
       t.info(h.content.replace(/<[^>]+>/g, ''), h.title, { timeOut: 10000, closeButton: true });
       return;
@@ -220,18 +221,16 @@ const PANEL_HTML = `
     <div class="flex-container flexFlowColumn">
       <div><strong>脚本设置</strong></div>
 
-      <div class="flex-container flexFlowColumn" style="margin-top:5px;">
-        <label for="varupdate-notify-level">
-          通知等级
-          <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-notify"></i>
-        </label>
-        <select id="varupdate-notify-level" class="text_pole">
+      <div class="flex-container alignItemsCenter" style="margin-top:8px; gap:8px;">
+        <label for="varupdate-notify-level" style="white-space:nowrap;">通知等级</label>
+        <select id="varupdate-notify-level" class="text_pole" style="flex:1;">
           <option value="debug">debug (全部)</option>
           <option value="always">always (成功+警告+错误)</option>
           <option value="notice" selected>notice (仅警告+错误)</option>
           <option value="error">error (仅错误)</option>
           <option value="silence">silence (静默)</option>
         </select>
+        <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-notify"></i>
       </div>
 
       <label class="checkbox_label" for="varupdate-auto-init" style="margin-top:5px;">
@@ -240,20 +239,17 @@ const PANEL_HTML = `
         <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-autoinit"></i>
       </label>
 
-      <div class="flex-container flexFlowColumn" style="margin-top:5px;">
-        <label for="varupdate-tolerance">
-          容错阈值
-          <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-tolerance"></i>
-        </label>
-        <input id="varupdate-tolerance" type="number" class="text_pole" min="0" max="99" step="1" value="2" />
+      <div class="flex-container alignItemsCenter" style="margin-top:5px; gap:8px;">
+        <label for="varupdate-tolerance" style="white-space:nowrap;">容错阈值</label>
+        <input id="varupdate-tolerance" type="number" class="text_pole" min="0" max="99" step="1" value="2" style="width:5rem;" />
+        <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-tolerance"></i>
       </div>
 
-      <div class="flex-container flexFlowColumn" style="margin-top:5px;">
-        <label for="varupdate-lifecycle">
-          变量生命周期（保留楼层数）
-          <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-lifecycle"></i>
-        </label>
-        <input id="varupdate-lifecycle" type="number" class="text_pole" min="1" max="9999" step="1" value="20" />
+      <div class="flex-container alignItemsCenter" style="margin-top:5px; gap:8px;">
+        <label for="varupdate-lifecycle" style="white-space:nowrap;">变量生命周期</label>
+        <input id="varupdate-lifecycle" type="number" class="text_pole" min="1" max="9999" step="1" value="20" style="width:5rem;" />
+        <span style="opacity:0.5; font-size:0.85em;">层</span>
+        <i class="fa-solid fa-circle-question fa-sm note-link-span varupdate-help-icon" id="varupdate-help-lifecycle"></i>
       </div>
     </div>
 
