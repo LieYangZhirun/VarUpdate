@@ -41,9 +41,11 @@ async function init(): Promise<void> {
 
   // 1. 渲染 UI 面板
   renderPanel({
-    onManualInit: handleManualInit,
-    onManualUpdate: handleManualUpdate,
-    onReset: handleReset,
+    onReloadRules: handleReloadRules,
+    onReinitFromGreeting: handleReinitFromGreeting,
+    onReparseFloor: handleReparseFloor,
+    onSetCheckpoint: handleSetCheckpoint,
+    onReparseFromCheckpoint: handleReparseFromCheckpoint,
   });
 
   // 2. 注册魔棒快捷按钮
@@ -294,24 +296,117 @@ async function loadSchema(): Promise<void> {
 //  手动操作回调
 // ═══════════════════════════════════════════
 
-function handleManualInit(): void {
-  notify.debug('手动操作', '手动触发初始化');
-  // TODO: 弹出输入框让用户输入初始化数据
+/**
+ * 重新加载格式规则
+ * 从世界书重新读取 [Var_Schema] 和 [Var_Default]，重新编译。
+ */
+async function handleReloadRules(): Promise<void> {
+  notify.debug('手动操作', '重新加载格式规则');
+  clearCache();
+  await loadSchema();
+  // TODO: 也加载 Default
+  notify.success('格式规则', '已从世界书重新加载');
 }
 
-function handleManualUpdate(): void {
-  notify.debug('手动操作', '手动触发更新');
-  // TODO: 对当前最新消息重新执行标签提取
-}
-
-function handleReset(): void {
+/**
+ * 从开场白重新初始化
+ * 重新读取开场白消息中的 <Var_Initial>，重建第 0 层变量。
+ */
+function handleReinitFromGreeting(): void {
+  notify.debug('手动操作', '从开场白重新初始化');
   try {
-    writeVariables('chat', {});
-    clearCache();
-    notify.success('变量重置', '所有变量已清空');
-    refreshDebugState({});
+    const context = (globalThis as any).SillyTavern?.getContext?.();
+    const greeting = context?.chat?.[0];
+    if (greeting?.mes) {
+      handleMessageContent(greeting.mes, 0);
+    } else {
+      notify.warning('初始化', '未找到开场白消息');
+    }
   } catch (e) {
-    notify.error('重置失败', (e as Error).message);
+    notify.error('初始化失败', (e as Error).message);
+  }
+}
+
+/**
+ * 重新解析当前楼层
+ * 清除当前最新楼层变量，重新解析标签并执行。
+ */
+function handleReparseFloor(): void {
+  notify.debug('手动操作', '重新解析当前楼层');
+  try {
+    const context = (globalThis as any).SillyTavern?.getContext?.();
+    if (!context?.chat?.length) {
+      notify.warning('重解析', '当前无聊天消息');
+      return;
+    }
+    const lastIndex = context.chat.length - 1;
+    const lastMsg = context.chat[lastIndex];
+    if (lastMsg?.mes) {
+      // 清除当前层变量后重新解析
+      writeVariables('message', {}, lastIndex);
+      handleMessageContent(lastMsg.mes, lastIndex);
+    }
+  } catch (e) {
+    notify.error('重解析失败', (e as Error).message);
+  }
+}
+
+/**
+ * 将当前楼层设为检查点
+ */
+function handleSetCheckpoint(): void {
+  notify.debug('手动操作', '设置变量检查点');
+  try {
+    const context = (globalThis as any).SillyTavern?.getContext?.();
+    if (!context?.chat?.length) {
+      notify.warning('检查点', '当前无聊天消息');
+      return;
+    }
+    const lastIndex = context.chat.length - 1;
+    const data = readVariables('message', lastIndex);
+    data._checkpoint = true;
+    writeVariables('message', data, lastIndex);
+    notify.success('检查点', `已将第 ${lastIndex} 层设为检查点`);
+  } catch (e) {
+    notify.error('检查点设置失败', (e as Error).message);
+  }
+}
+
+/**
+ * 从上个检查点逐层重新解析
+ */
+function handleReparseFromCheckpoint(): void {
+  notify.debug('手动操作', '从检查点逐层重新解析');
+  try {
+    const context = (globalThis as any).SillyTavern?.getContext?.();
+    if (!context?.chat?.length) {
+      notify.warning('链式重解析', '当前无聊天消息');
+      return;
+    }
+
+    // 找最近的检查点
+    let checkpointIndex = -1;
+    for (let i = context.chat.length - 1; i >= 0; i--) {
+      const d = readVariables('message', i);
+      if (d._checkpoint) {
+        checkpointIndex = i;
+        break;
+      }
+    }
+
+    const startIndex = checkpointIndex >= 0 ? checkpointIndex + 1 : 0;
+    notify.debug('链式重解析', `从第 ${startIndex} 层开始`);
+
+    for (let i = startIndex; i < context.chat.length; i++) {
+      const msg = context.chat[i];
+      if (msg?.mes) {
+        handleMessageContent(msg.mes, i);
+      }
+    }
+
+    notify.success('链式重解析', `已重新解析第 ${startIndex} ~ ${context.chat.length - 1} 层`);
+  } catch (e) {
+    notify.error('链式重解析失败', (e as Error).message);
   }
 }
 
