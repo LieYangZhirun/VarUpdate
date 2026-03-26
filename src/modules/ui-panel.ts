@@ -30,6 +30,10 @@ import type { NotifyLevel } from '../types/index.js';
 /** 持久化存储键名 */
 const CONFIG_KEY = 'VarUpdate_config';
 
+const PANEL_ROOT_ID = 'varupdate-settings';
+const TELEPORTED_STYLE_ID = 'varupdate-teleported-style';
+const WAND_IDS = ['varupdate-wand-reparse', 'varupdate-wand-checkpoint'] as const;
+
 // ═══════════════════════════════════════════
 //  获取宿主文档
 // ═══════════════════════════════════════════
@@ -345,11 +349,10 @@ let callbacks: PanelCallbacks = {};
 function teleportStyle(): void {
   try {
     const hostDoc = getHostDocument();
-    const styleId = 'varupdate-teleported-style';
-    if (hostDoc.getElementById(styleId)) return;
+    if (hostDoc.getElementById(TELEPORTED_STYLE_ID)) return;
 
     const styleEl = hostDoc.createElement('style');
-    styleEl.id = styleId;
+    styleEl.id = TELEPORTED_STYLE_ID;
     styleEl.textContent = PANEL_CSS;
     hostDoc.head.appendChild(styleEl);
   } catch { /* 静默 */ }
@@ -371,7 +374,7 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
 
   try {
     const hostDoc = getHostDocument();
-    if (hostDoc.getElementById('varupdate-settings')) return;
+    if (hostDoc.getElementById(PANEL_ROOT_ID)) return;
 
     // 传送样式到宿主 <head>
     teleportStyle();
@@ -429,6 +432,28 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
  * 通过 Teleport 到 #extensionsMenu（与酒馆助手 Toolbox.vue 同模式）
  * 向魔棒弹出菜单注入自定义条目。
  */
+/**
+ * 脚本卸载时拆除注入到宿主文档的 UI（设置面板、魔棒菜单项、teleport 样式）
+ */
+export function destroyPanel(): void {
+  try {
+    const hostDoc = getHostDocument();
+
+    const panel = hostDoc.getElementById(PANEL_ROOT_ID);
+    panel?.remove();
+
+    for (const id of WAND_IDS) {
+      hostDoc.getElementById(id)?.remove();
+    }
+
+    hostDoc.getElementById(TELEPORTED_STYLE_ID)?.remove();
+
+    callbacks = {};
+  } catch {
+    // 卸载时宿主可能已不可用
+  }
+}
+
 export function registerWandButtons(): void {
   try {
     const hostDoc = getHostDocument();

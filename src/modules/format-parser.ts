@@ -6,9 +6,11 @@
  * 接收一段结构化文本，自动检测格式（JSON → TOML → YAML），解析为 JavaScript 对象。
  *
  * 依赖：
- * - YAML（iframe 全局提供）
+ * - YAML：优先使用 iframe 全局 YAML；否则使用打包的 js-yaml（酒馆助手 iframe 常无全局 YAML）
  * - smol-toml（CDN import）
  */
+
+import { load as yamlLoad } from 'js-yaml';
 
 // ═══════════════════════════════════════════
 //  错误类
@@ -26,6 +28,16 @@ export class FormatParseError extends Error {
     super(message);
     this.name = 'FormatParseError';
   }
+}
+
+/** 将解析失败信息展开为可读多行文本（用于 toastr / 日志） */
+export function formatFormatParseDetails(e: FormatParseError): string {
+  const d = e.details;
+  const lines = [e.message];
+  if (d.jsonError) lines.push(`JSON：${d.jsonError}`);
+  if (d.tomlError) lines.push(`TOML：${d.tomlError}`);
+  if (d.yamlError) lines.push(`YAML：${d.yamlError}`);
+  return lines.join('\n');
 }
 
 // ═══════════════════════════════════════════
@@ -142,22 +154,15 @@ export function parseStructuredTextSync(text: string): Record<string, any> {
 /**
  * YAML 解析封装
  *
- * 运行时使用 iframe 全局 YAML 对象。
- * 测试时 fallback 到 js-yaml npm 包。
+ * 优先使用宿主/iframe 提供的 `YAML.load`（须为函数）。
+ * 若仅有名为 YAML 的占位对象而无 `.load`（酒馆助手环境常见），回退到打包的 js-yaml。
  */
 function parseYAML(text: string): any {
-  // 运行时：iframe 全局 YAML
-  if (typeof globalThis !== 'undefined' && (globalThis as any).YAML) {
-    return (globalThis as any).YAML.load(text);
+  const g = typeof globalThis !== 'undefined' ? (globalThis as { YAML?: { load?: (s: string) => unknown } }).YAML : undefined;
+  if (g && typeof g.load === 'function') {
+    return g.load(text);
   }
-  // 测试/Node 环境 fallback
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const yaml = require('js-yaml');
-    return yaml.load(text);
-  } catch {
-    throw new Error('YAML 解析器不可用');
-  }
+  return yamlLoad(text);
 }
 
 /**

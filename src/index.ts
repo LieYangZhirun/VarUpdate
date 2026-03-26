@@ -10,7 +10,7 @@
  */
 
 import { extractVarTags } from './modules/tag-extractor.js';
-import { parseStructuredText } from './modules/format-parser.js';
+import { parseStructuredText, FormatParseError, formatFormatParseDetails } from './modules/format-parser.js';
 import { compileSchemaFromData, clearCache, getCachedSchema } from './modules/schema-compiler/index.js';
 import { executeUpdate } from './modules/json-patch/index.js';
 import { readVariables, writeVariables, clearMessageVariablesAfter, pruneOrphanMessageVariables } from './modules/variable-store.js';
@@ -18,7 +18,7 @@ import * as eventBus from './modules/event-bus.js';
 import { EVENTS } from './modules/event-bus.js';
 import * as notify from './modules/notification.js';
 import { registerMacros } from './modules/macro-engine.js';
-import { renderPanel, registerWandButtons, refreshDebugState, getPanelSettings } from './modules/ui-panel.js';
+import { renderPanel, registerWandButtons, destroyPanel, refreshDebugState, getPanelSettings } from './modules/ui-panel.js';
 import { getValueByPath } from './shared/path-utils.js';
 import { mergeDeepWithConflictCheck, MergeConflictError } from './shared/merge-deep-conflict.js';
 import type { ExtractedTag, MessageCompletePayload } from './types/index.js';
@@ -28,6 +28,11 @@ function extractLorebookBody(content: string): string {
   const trimmed = (content || '').trim();
   const m = trimmed.match(/```.*\n([\s\S]*?)\n```/m);
   return m ? m[1] : trimmed;
+}
+
+interface LoreTaggedBody {
+  comment: string;
+  body: string;
 }
 
 // ═══════════════════════════════════════════
@@ -78,7 +83,7 @@ function bindEvents(): void {
     })();
   });
 
-  eventBus.on(EVENTS.MESSAGE_RECEIVED, (messageIndex: number) => {
+  eventBus.on(EVENTS.MESSAGE_RECEIVED, (messageIndex: number, reason?: string) => {
     if (isAgentsActive) return;
     // 备用：管道标志异常时，避免与 Agents 通道重复处理同一条消息
     if (Date.now() - lastAgentsMessageCompleteAt < 400) return;
@@ -86,7 +91,9 @@ function bindEvents(): void {
       const context = (globalThis as any).SillyTavern?.getContext?.();
       const message = context?.chat?.[messageIndex];
       if (message?.mes) {
-        void (async () => { await handleMessageContent(message.mes, messageIndex); })();
+        // ST 在「保存角色卡 / 导出前保存」等场景会再次派发 first_message，易与手动初始化重复弹窗
+        const quiet = reason === 'first_message';
+        void (async () => { await handleMessageContent(message.mes, messageIndex, { quiet }); })();
       }
     } catch (e) {
       notify.error('消息读取失败', (e as Error).message);
@@ -159,7 +166,11 @@ function getLatestMessageIndex(): number | undefined {
 }
 
 /** 处理消息内容：提取标签 → 初始化/更新/继承；尽量保证当前层有与情境一致的 data / log */
-async function handleMessageContent(content: string, messageIndex?: number): Promise<void> {
+async function handleMessageContent(
+  content: string,
+  messageIndex?: number,
+  opts?: { quiet?: boolean },
+): Promise<void> {
   const writeIndex = messageIndex ?? getLatestMessageIndex();
 
   const extraction = extractVarTags(content);
@@ -178,7 +189,7 @@ async function handleMessageContent(content: string, messageIndex?: number): Pro
 
   if (initialTags.length > 0) {
     for (const tag of initialTags) {
-      await handleInitial(tag, writeIndex);
+      await handleInitial(tag, writeIndex, opts);
     }
   }
 
@@ -227,7 +238,11 @@ function getPreviousData(messageIndex: number): Record<string, any> {
  *
  * 流程：清空当前层 → Initial 赋值 → Default 补全缺失字段 → Schema 校验
  */
-async function handleInitial(tag: ExtractedTag, messageIndex?: number): Promise<void> {
+async function handleInitial(
+  tag: ExtractedTag,
+  messageIndex?: number,
+  opts?: { quiet?: boolean },
+): Promise<void> {
   try {
     const data = await parseStructuredText(tag.content);
 
@@ -269,7 +284,11 @@ async function handleInitial(tag: ExtractedTag, messageIndex?: number): Promise<
       } catch { /* 静默 */ }
     }
 
-    notify.success('变量初始化', `${Object.keys(finalData).length} 个顶层变量已初始化`);
+    if (opts?.quiet) {
+      notify.debug('变量初始化', `${Object.keys(finalData).length} 个顶层变量已初始化（静默）`);
+    } else {
+      notify.success('变量初始化', `${Object.keys(finalData).length} 个顶层变量已初始化`);
+    }
 
     await eventBus.emit(EVENTS.INITIALIZED, {
       messageIndex: messageIndex ?? -1,
@@ -503,51 +522,81 @@ async function autoRecoverIfNeeded(): Promise<void> {
  * 从世界书扫描 [Var_Schema] 和 [Var_Default] 条目
  *
  * P1: chat 层键名 schema / default / schemaStatus
+ *
+ * @returns 是否未出现阻塞性错误（解析/合并/编译失败则为 false）
  */
-async function loadSchemaAndDefaultFromWorldBook(): Promise<void> {
+async function loadSchemaAndDefaultFromWorldBook(): Promise<boolean> {
+  const chatData = readVariables('chat');
+  let ok = true;
+
+  const announceSchemaOk = (msg: string) => notify.debug('Schema', msg);
+  const announceDefaultOk = (msg: string) => notify.debug('Default', msg);
+
   try {
     const lorebookName = (globalThis as any).getCurrentCharPrimaryLorebook?.();
     if (!lorebookName) {
       notify.debug('世界书', '未找到角色主世界书');
-      return;
+      writeVariables('chat', chatData);
+      return true;
     }
 
     const entries = await (globalThis as any).getLorebookEntries(lorebookName);
     if (!entries || !Array.isArray(entries)) {
       notify.debug('世界书', `无法读取世界书: ${lorebookName}`);
-      return;
+      writeVariables('chat', chatData);
+      return true;
     }
 
-    const schemaBodies: string[] = [];
-    const defaultBodies: string[] = [];
+    const schemaTagged: LoreTaggedBody[] = [];
+    const defaultTagged: LoreTaggedBody[] = [];
 
     for (const entry of entries) {
       const comment: string = entry.comment || '';
+      const raw = String((entry as { content?: unknown }).content ?? '');
       if (comment.includes('[Var_Schema]')) {
-        schemaBodies.push(extractLorebookBody(entry.content || ''));
+        schemaTagged.push({ comment, body: extractLorebookBody(raw) });
       }
       if (comment.includes('[Var_Default]')) {
-        defaultBodies.push(extractLorebookBody(entry.content || ''));
+        defaultTagged.push({ comment, body: extractLorebookBody(raw) });
       }
     }
 
-    const chatData = readVariables('chat');
-
     let mergedSchema: Record<string, any> | null = null;
     try {
-      for (const body of schemaBodies) {
+      for (const { comment, body } of schemaTagged) {
         const trimmed = body.trim();
         if (!trimmed) continue;
-        const obj = await parseStructuredText(trimmed);
-        mergedSchema = mergedSchema ? mergeDeepWithConflictCheck(mergedSchema, obj) : obj;
+        try {
+          const obj = await parseStructuredText(trimmed);
+          mergedSchema = mergedSchema ? mergeDeepWithConflictCheck(mergedSchema, obj) : obj;
+        } catch (e) {
+          if (e instanceof FormatParseError) {
+            ok = false;
+            chatData.schemaStatus = 'error';
+            delete chatData.schema;
+            notify.error(
+              'Schema 条目无法解析',
+              `世界书「${lorebookName}」\n备注含 [Var_Schema] 的条目：${comment.slice(0, 80)}${comment.length > 80 ? '…' : ''}\n\n${formatFormatParseDetails(e)}`,
+            );
+            mergedSchema = null;
+            break;
+          }
+          throw e;
+        }
       }
     } catch (e) {
       if (e instanceof MergeConflictError) {
+        ok = false;
         chatData.schemaStatus = 'error';
+        delete chatData.schema;
         notify.error('Schema 合并冲突', `${(e as MergeConflictError).message}（路径: ${(e as MergeConflictError).path}）`);
         mergedSchema = null;
       } else {
-        throw e;
+        ok = false;
+        chatData.schemaStatus = 'error';
+        delete chatData.schema;
+        notify.error('世界书 / Schema', (e as Error).message);
+        mergedSchema = null;
       }
     }
 
@@ -556,7 +605,8 @@ async function loadSchemaAndDefaultFromWorldBook(): Promise<void> {
         const compiled = await compileSchemaFromData(mergedSchema);
         chatData.schema = compiled.raw;
         chatData.schemaStatus = 'compiled';
-        notify.success('Schema', `编译成功（${schemaBodies.filter(b => b.trim()).length} 条合并），${compiled.defNames.length} 个 $defs 结构体`);
+        const n = schemaTagged.filter(t => t.body.trim()).length;
+        announceSchemaOk(`编译成功（${n} 条合并），${compiled.defNames.length} 个 $defs 结构体`);
 
         try {
           if (typeof registerVariableSchema === 'function') {
@@ -566,37 +616,63 @@ async function loadSchemaAndDefaultFromWorldBook(): Promise<void> {
 
         await eventBus.emit(EVENTS.SCHEMA_READY, { defNames: compiled.defNames });
       } catch (e) {
+        ok = false;
         chatData.schemaStatus = 'error';
+        delete chatData.schema;
         notify.error('Schema 编译失败', (e as Error).message);
       }
+    } else if (schemaTagged.some(t => t.body.trim()) && chatData.schemaStatus !== 'error') {
+      // 有条目但正文全空等：不覆盖 compiled，仅保持现状
     }
 
     let mergedDefault: Record<string, any> | null = null;
     try {
-      for (const body of defaultBodies) {
+      for (const { comment, body } of defaultTagged) {
         const trimmed = body.trim();
         if (!trimmed) continue;
-        const obj = await parseStructuredText(trimmed);
-        mergedDefault = mergedDefault ? mergeDeepWithConflictCheck(mergedDefault, obj) : obj;
+        try {
+          const obj = await parseStructuredText(trimmed);
+          mergedDefault = mergedDefault ? mergeDeepWithConflictCheck(mergedDefault, obj) : obj;
+        } catch (e) {
+          if (e instanceof FormatParseError) {
+            ok = false;
+            notify.error(
+              'Default 条目无法解析',
+              `世界书「${lorebookName}」\n备注含 [Var_Default] 的条目：${comment.slice(0, 80)}${comment.length > 80 ? '…' : ''}\n\n${formatFormatParseDetails(e)}`,
+            );
+            mergedDefault = null;
+            break;
+          }
+          throw e;
+        }
       }
     } catch (e) {
       if (e instanceof MergeConflictError) {
+        ok = false;
         notify.error('Default 合并冲突', `${(e as MergeConflictError).message}（路径: ${(e as MergeConflictError).path}）`);
         mergedDefault = null;
       } else {
-        throw e;
+        ok = false;
+        notify.error('世界书 / Default', (e as Error).message);
+        mergedDefault = null;
       }
     }
 
     if (mergedDefault) {
       chatData.default = mergedDefault;
-      notify.success('Default', `加载了 ${Object.keys(chatData.default).length} 个顶层键（${defaultBodies.filter(b => b.trim()).length} 条合并）`);
+      const n = defaultTagged.filter(t => t.body.trim()).length;
+      announceDefaultOk(`已加载 ${Object.keys(chatData.default).length} 个顶层键（${n} 条合并）`);
     }
 
     writeVariables('chat', chatData);
+    return ok;
 
   } catch (e) {
+    ok = false;
+    chatData.schemaStatus = 'error';
     notify.error('世界书加载失败', (e as Error).message);
+    writeVariables('chat', chatData);
+    return false;
   }
 }
 
@@ -627,8 +703,12 @@ async function handleReloadRules(): Promise<void> {
   delete chatData.default;
   chatData.schemaStatus = 'not_loaded';
   writeVariables('chat', chatData);
-  await loadSchemaAndDefaultFromWorldBook();
-  notify.feedback(true, '格式规则', '已从世界书重新加载');
+  const ok = await loadSchemaAndDefaultFromWorldBook();
+  if (ok) {
+    notify.feedback(true, '格式规则', '已从世界书重新加载 [Var_Schema] / [Var_Default]');
+  } else {
+    notify.feedback(false, '格式规则', '未能从世界书完成加载：请查看上一条红色提示中的条目备注与解析详情。');
+  }
 }
 
 async function handleReinitFromGreeting(): Promise<void> {
@@ -730,6 +810,10 @@ async function handleReparseFromCheckpoint(): Promise<void> {
 // ═══════════════════════════════════════════
 
 function cleanup(): void {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('pagehide', cleanup);
+  }
+  destroyPanel();
   unregisterMacros?.();
   eventBus.removeAll();
   notify.debug('卸载', 'VarUpdate 脚本已卸载');

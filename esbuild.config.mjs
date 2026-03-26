@@ -15,7 +15,6 @@ build({
     // iframe 全局提供的库
     'lodash',
     'zod',
-    'js-yaml',
     'jquery',
     'toastr',
     // CDN 加载的第三方库
