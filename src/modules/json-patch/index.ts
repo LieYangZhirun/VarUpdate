@@ -29,7 +29,7 @@ async function ensureFlexibleJsonPatch() {
     try {
       flexibleJsonPatch = await import(
         // @ts-ignore
-        'https://testingcf.jsdelivr.net/gh/LieYangZhirun/flexible-json-patch/dist/index.js'
+        'https://testingcf.jsdelivr.net/gh/LieYangZhirun/Flexible-json-patch/dist/index.js'
       );
     } catch (e) {
       throw new Error(`加载 flexible-json-patch 失败: ${(e as Error).message}`);
