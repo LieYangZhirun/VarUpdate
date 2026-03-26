@@ -11,7 +11,12 @@
 
 import { extractVarTags } from './modules/tag-extractor.js';
 import { parseStructuredText, FormatParseError, formatFormatParseDetails } from './modules/format-parser.js';
-import { compileSchemaFromData, clearCache, getCachedSchema } from './modules/schema-compiler/index.js';
+import {
+  bindSafeParseWithContext,
+  compileSchemaFromData,
+  clearCache,
+  getCachedSchema,
+} from './modules/schema-compiler/index.js';
 import { executeUpdate } from './modules/json-patch/index.js';
 import { readVariables, writeVariables, clearMessageVariablesAfter, pruneOrphanMessageVariables } from './modules/variable-store.js';
 import * as eventBus from './modules/event-bus.js';
@@ -22,6 +27,68 @@ import { renderPanel, registerWandButtons, destroyPanel, refreshDebugState, getP
 import { getValueByPath } from './shared/path-utils.js';
 import { mergeDeepWithConflictCheck, MergeConflictError } from './shared/merge-deep-conflict.js';
 import type { ExtractedTag, MessageCompletePayload } from './types/index.js';
+import { z } from 'zod';
+
+/**
+ * 酒馆 message 层实际结构为 { data, log?, isInitPoint? }；registerVariableSchema 按「整层对象」校验。
+ * 将用户定义的 Schema 挂在 `data` 上，避免把 data / log / isInitPoint 判为非法顶层键。
+ */
+function wrapValidatorForMessageLayer(validator: z.ZodTypeAny): z.ZodTypeAny {
+  return z
+    .object({
+      data: validator,
+      log: z.record(z.string(), z.any()).optional(),
+      isInitPoint: z.boolean().optional(),
+    })
+    .passthrough();
+}
+
+/** 向酒馆变量管理器注册 message 层校验器（整层对象为 { data, log?, isInitPoint? }） */
+function tryRegisterMessageLayerVariableSchema(validator: z.ZodTypeAny): void {
+  try {
+    if (typeof registerVariableSchema === 'function') {
+      registerVariableSchema(wrapValidatorForMessageLayer(validator), { type: 'message' });
+    }
+  } catch {
+    /* 静默 */
+  }
+}
+
+/**
+ * 安全读取角色主世界书名。
+ * 酒馆助手 `getCurrentCharPrimaryLorebook` 内部会调 `getCharLorebooks()`，无角色卡时抛「未找到当前打开的角色卡」。
+ */
+function tryGetCurrentCharPrimaryLorebookName(): string | null {
+  try {
+    const fn = (globalThis as any).getCurrentCharPrimaryLorebook;
+    if (typeof fn !== 'function') return null;
+    const name = fn();
+    if (name == null || name === '') return null;
+    const s = String(name).trim();
+    return s || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 是否处于「已打开一张有效角色卡」语境（非默认助手临时聊天）。
+ * SillyTavern：`getContext().characterId` 即 `this_chid`；仅 Assistant 时常为 undefined（见 script.js / st-context.js）。
+ */
+function isBoundCharacterCardOpen(): boolean {
+  try {
+    const ctx = (globalThis as any).SillyTavern?.getContext?.();
+    if (!ctx?.characters) return false;
+    if (ctx.groupId) return true;
+    const id = ctx.characterId;
+    if (id === undefined || id === null) return false;
+    const ch = ctx.characters[id];
+    if (!ch || ch.avatar === 'none') return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** 世界书条目正文：若存在围栏代码块则取块内，否则用全文 */
 function extractLorebookBody(content: string): string {
@@ -77,6 +144,10 @@ function bindEvents(): void {
   eventBus.on(EVENTS.PIPELINE_ENDED, () => { isAgentsActive = false; });
 
   eventBus.on(EVENTS.MESSAGE_COMPLETE, (payload: MessageCompletePayload) => {
+    if (!payload || typeof payload.content !== 'string') {
+      notify.debug('Agents', 'message_complete 负载无效，已忽略');
+      return;
+    }
     lastAgentsMessageCompleteAt = Date.now();
     void (async () => {
       await handleMessageContent(payload.content, payload.messageIndex);
@@ -154,7 +225,9 @@ function bindEvents(): void {
 // ═══════════════════════════════════════════
 
 /**
- * 面向用户 G-1：「仅解析」模式下 messageIndex 为 undefined 时，变量仍写入当前最新楼层
+ * G-1 兜底：未传入 messageIndex 时，假定写入当前 chat 最后一楼。
+ *
+ * Agents 在 `message_complete` 里应尽可能带上 **逻辑楼层**（含仅解析/预览：不持久化 mes 也可有目标下标）。
  */
 function getLatestMessageIndex(): number | undefined {
   try {
@@ -187,9 +260,29 @@ async function handleMessageContent(
   const initialTags = extraction.tags.filter(t => t.type === 'initial');
   const updateTags = extraction.tags.filter(t => t.type === 'update');
 
+  // 多条 Var_Initial：与各标签正文先解析为对象，再深度合并；同路径定义不一致 → 报错（与世界书 Schema/Default 相同策略）
   if (initialTags.length > 0) {
-    for (const tag of initialTags) {
-      await handleInitial(tag, writeIndex, opts);
+    try {
+      let mergedInitial: Record<string, any> | null = null;
+      for (const tag of initialTags) {
+        const obj = await parseStructuredText(tag.content);
+        mergedInitial =
+          mergedInitial === null ? obj : mergeDeepWithConflictCheck(mergedInitial, obj);
+      }
+      if (mergedInitial !== null) {
+        await applyInitialMergedData(mergedInitial, writeIndex, opts);
+      }
+    } catch (e) {
+      if (e instanceof MergeConflictError) {
+        notify.error(
+          'Var_Initial 合并冲突',
+          `${e.message}（路径: ${e.path}）`,
+        );
+      } else if (e instanceof FormatParseError) {
+        notify.error('Var_Initial 解析失败', formatFormatParseDetails(e));
+      } else {
+        notify.error('Var_Initial 处理失败', (e as Error).message);
+      }
     }
   }
 
@@ -234,18 +327,16 @@ function getPreviousData(messageIndex: number): Record<string, any> {
 }
 
 /**
- * 处理变量初始化（面向用户 C-2）
+ * 应用已合并的 Initial 对象（面向用户 C-2）
  *
- * 流程：清空当前层 → Initial 赋值 → Default 补全缺失字段 → Schema 校验
+ * 流程：Default 补全 → Schema 校验 → 写入 message 层
  */
-async function handleInitial(
-  tag: ExtractedTag,
+async function applyInitialMergedData(
+  data: Record<string, any>,
   messageIndex?: number,
   opts?: { quiet?: boolean },
 ): Promise<void> {
   try {
-    const data = await parseStructuredText(tag.content);
-
     // Default 补全：用 chat 层 default 填充 Initial 中未提供的字段
     const chatData = readVariables('chat');
     const defaultValues = chatData.default || {};
@@ -255,14 +346,21 @@ async function handleInitial(
     let finalData = merged;
     const schema = getCachedSchema();
     if (schema) {
-      const validationResult = safeParse(schema, merged);
-      if (validationResult.success) {
-        // 使用 Zod 转换后的数据（含 $default 填充和 force 类型转换）
-        finalData = validationResult.parsedData;
+      // 须走 safeParseWithContext，否则 Schema 中 refer() 不会在 Initial 阶段生效
+      const parseFn = await bindSafeParseWithContext(schema, {
+        resolveRef: (path: string) => getValueByPath(merged, path),
+      });
+      const zResult = parseFn(merged);
+      if (zResult.success) {
+        finalData = (zResult.data ?? merged) as Record<string, any>;
       } else {
-        // F-1 / C-2：Initial 整体校验失败时不写入未校验数据（配置/数据错误，非单条 Patch 丢弃）
-        const detail = validationResult.errors.map((e: any) => `${e.path}: ${e.message}`).join('; ');
-        notify.error('初始化校验失败', detail || 'Schema 校验未通过');
+        const detail =
+          zResult.error?.issues
+            ?.map((issue: { path: (string | number)[]; message: string }) =>
+              `${issue.path?.join('/') ?? ''}: ${issue.message}`,
+            )
+            .join('; ') ?? 'Schema 校验未通过';
+        notify.error('初始化校验失败', detail);
         return;
       }
     }
@@ -277,11 +375,7 @@ async function handleInitial(
 
     // P7: 注册 Schema 到变量管理器
     if (schema) {
-      try {
-        if (typeof registerVariableSchema === 'function') {
-          registerVariableSchema(schema.validator, { type: 'message' });
-        }
-      } catch { /* 静默 */ }
+      tryRegisterMessageLayerVariableSchema(schema.validator as z.ZodTypeAny);
     }
 
     if (opts?.quiet) {
@@ -320,54 +414,23 @@ function mergeDefaults(data: Record<string, any>, defaults: Record<string, any>)
 }
 
 /**
- * 同步 Schema 校验（Zod safeParse 包装）
- *
- * 返回 Zod 转换后的数据（含 $default 填充和 force 类型转换）。
- * 调用方应使用 parsedData 而非原始输入，以获得完整的 Schema 处理结果。
- */
-function safeParse(schema: any, data: Record<string, any>): {
-  success: boolean;
-  errors: any[];
-  parsedData: Record<string, any>;
-} {
-  try {
-    const result = schema.validator?.safeParse?.(data);
-    if (!result) return { success: true, errors: [], parsedData: data };
-    if (result.success) return { success: true, errors: [], parsedData: result.data };
-    return {
-      success: false,
-      errors: result.error?.issues?.map((issue: any) => ({
-        path: issue.path?.join('/') ?? '',
-        message: issue.message ?? '',
-      })) ?? [],
-      parsedData: data,
-    };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    notify.debug('Schema 校验异常', msg);
-    return {
-      success: false,
-      errors: [{ path: '', message: msg }],
-      parsedData: data,
-    };
-  }
-}
-
-/**
  * 处理变量更新（面向用户 D-1~D-4, 七·F-2）
  */
 async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promise<void> {
+  if (messageIndex === undefined) {
+    notify.warning(
+      'Var_Update 已跳过',
+      '无法确定目标消息楼层（例如当前无聊天记录，或 Agents 未传入 messageIndex）。未执行补丁、未写入 message 层。',
+    );
+    return;
+  }
+
   const combinedText = tags.map(t => t.content).join('\n');
 
-  let currentData: Record<string, any>;
-  if (messageIndex !== undefined) {
-    const msgVars = readVariables('message', messageIndex);
-    currentData = msgVars.data
-      ? JSON.parse(JSON.stringify(msgVars.data))
-      : getPreviousData(messageIndex);
-  } else {
-    currentData = {};
-  }
+  const msgVarsForRead = readVariables('message', messageIndex);
+  const currentData = msgVarsForRead.data
+    ? JSON.parse(JSON.stringify(msgVarsForRead.data))
+    : getPreviousData(messageIndex);
 
   const dataCopy = JSON.parse(JSON.stringify(currentData));
 
@@ -384,20 +447,21 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
       validationContext
     );
 
-    if (messageIndex !== undefined) {
+    // P3: 丢弃数超过阈值视为整次更新失败，不得把内存中的 result 写入 message 层（否则与 UPDATE_FAILED 矛盾）
+    const { discardThreshold } = getPanelSettings();
+    const discardedCount = result.discarded.length;
+    const rejectedByThreshold = discardedCount > discardThreshold;
+
+    if (!rejectedByThreshold) {
       const msgVars = readVariables('message', messageIndex);
       msgVars.data = result.data;
       msgVars.log = result.log;
       writeVariables('message', msgVars, messageIndex);
     }
 
-    // P3: 使用设计字段名 discardThreshold
-    const { discardThreshold } = getPanelSettings();
-    const discardedCount = result.discarded.length;
-
-    if (discardedCount <= discardThreshold) {
+    if (!rejectedByThreshold) {
       await eventBus.emit(EVENTS.UPDATED, {
-        messageIndex: messageIndex ?? -1,
+        messageIndex,
         appliedCount: result.appliedCount,
         discardedCount,
         log: result.log,
@@ -406,25 +470,28 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
       if (discardedCount > 0) {
         notify.warning('变量更新', `${result.appliedCount} 条成功，${discardedCount} 条丢弃（≤ 阈值 ${discardThreshold}）`);
       }
+      refreshDebugState(result.data);
     } else {
+      notify.error(
+        '变量更新未应用',
+        `丢弃 ${discardedCount} 条指令，超过阈值 ${discardThreshold}，本层变量保持原状`,
+      );
       await eventBus.emit(EVENTS.UPDATE_FAILED, {
-        messageIndex: messageIndex ?? -1,
+        messageIndex,
         reason: `丢弃 ${discardedCount} 条指令（超过阈值 ${discardThreshold}）`,
         discardedCount,
       });
+      const prev = readVariables('message', messageIndex);
+      refreshDebugState((prev.data ?? {}) as Record<string, any>);
     }
-
-    refreshDebugState(result.data);
 
   } catch (e) {
     notify.error('更新执行失败', (e as Error).message);
-    if (messageIndex !== undefined) {
-      await eventBus.emit(EVENTS.UPDATE_FAILED, {
-        messageIndex,
-        reason: (e as Error).message,
-        discardedCount: 0,
-      });
-    }
+    await eventBus.emit(EVENTS.UPDATE_FAILED, {
+      messageIndex,
+      reason: (e as Error).message,
+      discardedCount: 0,
+    });
   }
 }
 
@@ -467,6 +534,7 @@ function cleanupOldVariables(currentIndex: number): void {
 async function autoInitGreeting(): Promise<void> {
   const { autoInitialize } = getPanelSettings();
   if (!autoInitialize) return;
+  if (!isBoundCharacterCardOpen()) return;
   try {
     const context = (globalThis as any).SillyTavern?.getContext?.();
     const greeting = context?.chat?.[0];
@@ -523,9 +591,10 @@ async function autoRecoverIfNeeded(): Promise<void> {
  *
  * P1: chat 层键名 schema / default / schemaStatus
  *
+ * @param opts.expectLorebook 为 true 时（如用户点击「重新加载格式规则」）：无角色卡/无主世界书视为失败并 warning；否则仅 debug 跳过（初始化/切聊天等）。
  * @returns 是否未出现阻塞性错误（解析/合并/编译失败则为 false）
  */
-async function loadSchemaAndDefaultFromWorldBook(): Promise<boolean> {
+async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boolean }): Promise<boolean> {
   const chatData = readVariables('chat');
   let ok = true;
 
@@ -533,11 +602,21 @@ async function loadSchemaAndDefaultFromWorldBook(): Promise<boolean> {
   const announceDefaultOk = (msg: string) => notify.debug('Default', msg);
 
   try {
-    const lorebookName = (globalThis as any).getCurrentCharPrimaryLorebook?.();
+    const lorebookName = tryGetCurrentCharPrimaryLorebookName();
     if (!lorebookName) {
-      notify.debug('世界书', '未找到角色主世界书');
+      if (opts?.expectLorebook) {
+        notify.warning(
+          '格式规则',
+          '未打开角色卡或未绑定主世界书，无法从世界书加载 [Var_Schema] / [Var_Default]。',
+        );
+      } else {
+        notify.debug(
+          '世界书',
+          '当前无角色卡或未绑定主世界书，跳过从世界书加载格式规则',
+        );
+      }
       writeVariables('chat', chatData);
-      return true;
+      return !opts?.expectLorebook;
     }
 
     const entries = await (globalThis as any).getLorebookEntries(lorebookName);
@@ -608,11 +687,7 @@ async function loadSchemaAndDefaultFromWorldBook(): Promise<boolean> {
         const n = schemaTagged.filter(t => t.body.trim()).length;
         announceSchemaOk(`编译成功（${n} 条合并），${compiled.defNames.length} 个 $defs 结构体`);
 
-        try {
-          if (typeof registerVariableSchema === 'function') {
-            registerVariableSchema(compiled.validator, { type: 'message' });
-          }
-        } catch { /* 静默 */ }
+        tryRegisterMessageLayerVariableSchema(compiled.validator as z.ZodTypeAny);
 
         await eventBus.emit(EVENTS.SCHEMA_READY, { defNames: compiled.defNames });
       } catch (e) {
@@ -681,6 +756,7 @@ async function loadSchema(): Promise<void> {
     const chatData = readVariables('chat');
     if (chatData.schema && chatData.schemaStatus === 'compiled') {
       const compiled = await compileSchemaFromData(chatData.schema);
+      tryRegisterMessageLayerVariableSchema(compiled.validator as z.ZodTypeAny);
       await eventBus.emit(EVENTS.SCHEMA_READY, { defNames: compiled.defNames });
       return;
     }
@@ -703,16 +779,24 @@ async function handleReloadRules(): Promise<void> {
   delete chatData.default;
   chatData.schemaStatus = 'not_loaded';
   writeVariables('chat', chatData);
-  const ok = await loadSchemaAndDefaultFromWorldBook();
+  const ok = await loadSchemaAndDefaultFromWorldBook({ expectLorebook: true });
   if (ok) {
     notify.feedback(true, '格式规则', '已从世界书重新加载 [Var_Schema] / [Var_Default]');
   } else {
-    notify.feedback(false, '格式规则', '未能从世界书完成加载：请查看上一条红色提示中的条目备注与解析详情。');
+    notify.feedback(
+      false,
+      '格式规则',
+      '未能完成加载：若无角色卡请先打开角色卡；若有红/橙提示请按其说明处理条目或世界书。',
+    );
   }
 }
 
 async function handleReinitFromGreeting(): Promise<void> {
   notify.debug('手动操作', '从开场白重新初始化');
+  if (!isBoundCharacterCardOpen()) {
+    notify.feedback(false, '开场白初始化', '请先打开一张角色卡后再使用（默认助手聊天无绑定世界书，变量规则不适用）。');
+    return;
+  }
   try {
     const context = (globalThis as any).SillyTavern?.getContext?.();
     const greeting = context?.chat?.[0];
@@ -730,6 +814,10 @@ async function handleReinitFromGreeting(): Promise<void> {
 
 async function handleReparseFloor(): Promise<void> {
   notify.debug('手动操作', '重新解析当前楼层');
+  if (!isBoundCharacterCardOpen()) {
+    notify.feedback(false, '重解析', '请先打开一张角色卡后再使用。');
+    return;
+  }
   try {
     const context = (globalThis as any).SillyTavern?.getContext?.();
     if (!context?.chat?.length) {
@@ -745,6 +833,8 @@ async function handleReparseFloor(): Promise<void> {
       writeVariables('message', msgVars, lastIndex);
       await handleMessageContent(lastMsg.mes, lastIndex);
       notify.feedback(true, '重解析', `已重新解析第 ${lastIndex} 层`);
+    } else {
+      notify.feedback(false, '重解析', '当前楼层没有可解析的消息正文');
     }
   } catch (e) {
     notify.error('重解析失败', (e as Error).message);
@@ -754,10 +844,14 @@ async function handleReparseFloor(): Promise<void> {
 
 function handleSetCheckpoint(): void {
   notify.debug('手动操作', '设置变量检查点');
+  if (!isBoundCharacterCardOpen()) {
+    notify.feedback(false, '检查点', '请先打开一张角色卡后再使用。');
+    return;
+  }
   try {
     const context = (globalThis as any).SillyTavern?.getContext?.();
     if (!context?.chat?.length) {
-      notify.warning('检查点', '当前无聊天消息');
+      notify.feedback(false, '检查点', '当前无聊天消息');
       return;
     }
     const lastIndex = context.chat.length - 1;
@@ -768,15 +862,20 @@ function handleSetCheckpoint(): void {
     notify.feedback(true, '检查点', `已将第 ${lastIndex} 层设为检查点`);
   } catch (e) {
     notify.error('检查点设置失败', (e as Error).message);
+    notify.feedback(false, '检查点', (e as Error).message);
   }
 }
 
 async function handleReparseFromCheckpoint(): Promise<void> {
   notify.debug('手动操作', '从检查点逐层重新解析');
+  if (!isBoundCharacterCardOpen()) {
+    notify.feedback(false, '链式重解析', '请先打开一张角色卡后再使用。');
+    return;
+  }
   try {
     const context = (globalThis as any).SillyTavern?.getContext?.();
     if (!context?.chat?.length) {
-      notify.warning('链式重解析', '当前无聊天消息');
+      notify.feedback(false, '链式重解析', '当前无聊天消息');
       return;
     }
 
@@ -802,6 +901,7 @@ async function handleReparseFromCheckpoint(): Promise<void> {
     notify.feedback(true, '链式重解析', `已重新解析第 ${startIndex} ~ ${context.chat.length - 1} 层`);
   } catch (e) {
     notify.error('链式重解析失败', (e as Error).message);
+    notify.feedback(false, '链式重解析', (e as Error).message);
   }
 }
 

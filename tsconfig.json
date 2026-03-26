@@ -13,9 +13,12 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@vendor/promptal-yaml": ["./vendor/promptal-yaml/src/index.ts"],
+      "@vendor/schema-to-zod": ["./vendor/schema-to-zod/src/index.ts"],
+      "@vendor/flexible-json-patch": ["./vendor/flexible-json-patch/src/index.ts"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "vendor/**/*.ts"],
   "exclude": ["node_modules"]
 }

@@ -9,34 +9,13 @@
  * 3. 执行与校验
  */
 
+import { parseInstructions } from '@vendor/flexible-json-patch';
 import { resolvePath } from './path-resolver.js';
 import { executeInstructions } from './executor.js';
 import * as notify from '../notification.js';
 import type { PatchInstruction, UpdateResult } from '../../types/index.js';
 import { bindSafeParseWithContext } from '../schema-compiler/index.js';
 import type { CompiledSchema, ValidationContext } from '../schema-compiler/index.js';
-
-// ═══════════════════════════════════════════
-//  CDN 模块加载
-// ═══════════════════════════════════════════
-
-let flexibleJsonPatch: {
-  parseInstructions: (rawText: string) => { instructions: PatchInstruction[]; discarded: any[] };
-} | null = null;
-
-async function ensureFlexibleJsonPatch() {
-  if (!flexibleJsonPatch) {
-    try {
-      flexibleJsonPatch = await import(
-        // @ts-ignore
-        'https://testingcf.jsdelivr.net/gh/LieYangZhirun/Flexible-json-patch/dist/index.js'
-      );
-    } catch (e) {
-      throw new Error(`加载 flexible-json-patch 失败: ${(e as Error).message}`);
-    }
-  }
-  return flexibleJsonPatch!;
-}
 
 // ═══════════════════════════════════════════
 //  公开接口
@@ -61,10 +40,9 @@ export async function executeUpdate(
 ): Promise<UpdateResult> {
 
   // ═══ 第一层：指令预处理 ═══
-  const lib = await ensureFlexibleJsonPatch();
   let parseResult;
   try {
-    parseResult = lib.parseInstructions(rawText);
+    parseResult = parseInstructions(rawText);
   } catch (e) {
     // F-2: 整段解析失败 → 抛出异常，由 handleUpdate 广播 UPDATE_FAILED
     notify.error('指令解析失败', (e as Error).message);
@@ -156,7 +134,7 @@ export function executeUpdateSync(
   instructions: PatchInstruction[],
   currentData: Record<string, any>,
   schema?: CompiledSchema,
-  safeParseWithContext?: (data: Record<string, any>) => { success: boolean; data?: any; error?: any },
+  boundSafeParse?: (data: Record<string, any>) => { success: boolean; data?: any; error?: any },
 ): UpdateResult {
   const resolvedInstructions: PatchInstruction[] = [];
   const pathDiscarded: Array<{ instruction: PatchInstruction; reason: string }> = [];
@@ -170,7 +148,7 @@ export function executeUpdateSync(
     }
   }
 
-  const execResult = executeInstructions(resolvedInstructions, currentData, schema, safeParseWithContext);
+  const execResult = executeInstructions(resolvedInstructions, currentData, schema, boundSafeParse);
   execResult.discarded = [...pathDiscarded, ...execResult.discarded];
   return execResult;
 }

@@ -3,74 +3,26 @@
  *
  * 模块 2：Schema 编译器
  *
- * 对公共库 schema-to-zod 的封装层，添加 VarUpdate 特有功能：
+ * 对 schema-to-zod 的封装层（与主包一并打包），添加 VarUpdate 特有功能：
  * - 与模块 1（格式解析器）集成
  * - Schema 缓存（避免重复编译）
  * - 与通知系统集成（编译错误 → L3 通知）
- *
- * 运行时通过 CDN import schema-to-zod
  */
 
+import {
+  compileSchema,
+  validateWithSchema,
+  safeParseWithContext,
+} from '@vendor/schema-to-zod';
+import type {
+  CompiledSchema,
+  ValidationContext,
+  ValidationResult,
+} from '@vendor/schema-to-zod';
 import { parseStructuredText, FormatParseError } from '../format-parser.js';
 import * as notify from '../notification.js';
 
-// ═══════════════════════════════════════════
-//  公开类型（镜像 schema-to-zod 的接口）
-// ═══════════════════════════════════════════
-
-/** 编译结果 */
-export interface CompiledSchema {
-  validator: any; // z.ZodType<any>（运行时从 schema-to-zod 获取）
-  raw: Record<string, any>;
-  defNames: string[];
-}
-
-/** 校验结果 */
-export interface ValidationResult {
-  success: boolean;
-  errors: Array<{
-    path: string;
-    message: string;
-    expected: string;
-    received: any;
-  }>;
-}
-
-/** 校验上下文 */
-export interface ValidationContext {
-  resolveRef: (path: string) => any;
-}
-
-// ═══════════════════════════════════════════
-//  CDN 模块加载
-// ═══════════════════════════════════════════
-
-let schemaToZod: {
-  compileSchema: (data: Record<string, any>) => CompiledSchema;
-  validateWithSchema: (schema: CompiledSchema, data: Record<string, any>, ctx: ValidationContext) => ValidationResult;
-  safeParseWithContext: (
-    schema: CompiledSchema,
-    data: unknown,
-    context: ValidationContext | null
-  ) => { success: boolean; data?: any; error?: any };
-} | null = null;
-
-/**
- * 懒加载 schema-to-zod 公共库
- */
-async function ensureSchemaToZod() {
-  if (!schemaToZod) {
-    try {
-      schemaToZod = await import(
-        // @ts-ignore - CDN URL import
-        'https://testingcf.jsdelivr.net/gh/LieYangZhirun/schema-to-zod/dist/index.js'
-      );
-    } catch (e) {
-      throw new Error(`加载 schema-to-zod 失败: ${(e as Error).message}`);
-    }
-  }
-  return schemaToZod!;
-}
+export type { CompiledSchema, ValidationContext, ValidationResult };
 
 // ═══════════════════════════════════════════
 //  Schema 缓存
@@ -120,9 +72,8 @@ export async function compileSchemaFromText(schemaText: string): Promise<Compile
   }
 
   // 步骤 3：编译
-  const lib = await ensureSchemaToZod();
   try {
-    const compiled = lib.compileSchema(schemaData);
+    const compiled = compileSchema(schemaData);
     cachedSchema = compiled;
     cachedSchemaHash = hash;
     notify.success('Schema 编译成功', `定义了 ${compiled.defNames.length} 个结构体`);
@@ -142,9 +93,8 @@ export async function compileSchemaFromData(schemaData: Record<string, any>): Pr
     return cachedSchema;
   }
 
-  const lib = await ensureSchemaToZod();
   try {
-    const compiled = lib.compileSchema(schemaData);
+    const compiled = compileSchema(schemaData);
     cachedSchema = compiled;
     cachedSchemaHash = hash;
     return compiled;
@@ -160,10 +110,9 @@ export async function compileSchemaFromData(schemaData: Record<string, any>): Pr
 export async function validate(
   schema: CompiledSchema,
   data: Record<string, any>,
-  context: ValidationContext
+  context: ValidationContext,
 ): Promise<ValidationResult> {
-  const lib = await ensureSchemaToZod();
-  return lib.validateWithSchema(schema, data, context);
+  return validateWithSchema(schema, data, context);
 }
 
 /**
@@ -189,10 +138,6 @@ export async function bindSafeParseWithContext(
   schema: CompiledSchema,
   context: ValidationContext | undefined,
 ): Promise<(data: Record<string, any>) => { success: boolean; data?: any; error?: any }> {
-  const lib = await ensureSchemaToZod();
   const ctx = context ?? null;
-  if (typeof lib.safeParseWithContext !== 'function') {
-    return (data: Record<string, any>) => schema.validator.safeParse(data);
-  }
-  return (data: Record<string, any>) => lib.safeParseWithContext(schema, data, ctx);
+  return (data: Record<string, any>) => safeParseWithContext(schema, data, ctx);
 }

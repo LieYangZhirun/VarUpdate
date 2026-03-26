@@ -13,7 +13,7 @@
  * - varupdate:schema_ready      Schema 编译完成
  *
  * 监听事件：
- * - agents:message_complete     Agents 消息完成
+ * - agents:message_complete     Agents 消息完成（payload 宜含 messageIndex，见 types/MessageCompletePayload）
  * - varupdate:retry_requested   重试请求
  */
 

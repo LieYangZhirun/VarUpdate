@@ -1,6 +1,13 @@
 import { build } from 'esbuild';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = process.argv.includes('--dev');
+
+/** 内嵌 vendor：仅 VarUpdate 目录即可构建，无需上级 MyProject 兄弟包 */
+const vendorRoot = path.join(__dirname, 'vendor');
 
 build({
   entryPoints: ['src/index.ts'],
@@ -11,17 +18,11 @@ build({
   target: 'es2020',
   sourcemap: isDev,
   minify: !isDev,
-  external: [
-    // iframe 全局提供的库
-    'lodash',
-    'zod',
-    'jquery',
-    'toastr',
-    // CDN 加载的第三方库
-    'klona',
-    'smol-toml',
-    'json5',
-  ],
+  alias: {
+    '@vendor/promptal-yaml': path.join(vendorRoot, 'promptal-yaml/src/index.ts'),
+    '@vendor/schema-to-zod': path.join(vendorRoot, 'schema-to-zod/src/index.ts'),
+    '@vendor/flexible-json-patch': path.join(vendorRoot, 'flexible-json-patch/src/index.ts'),
+  },
 }).then(() => {
-  console.log(`✅ VarUpdate build complete (${isDev ? 'dev' : 'prod'})`);
+  console.log(`✅ VarUpdate build complete (${isDev ? 'dev' : 'prod'}) — full bundle, no externals`);
 }).catch(() => process.exit(1));

@@ -7,10 +7,11 @@
  *
  * 依赖：
  * - YAML：优先使用 iframe 全局 YAML；否则使用打包的 js-yaml（酒馆助手 iframe 常无全局 YAML）
- * - smol-toml（CDN import）
+ * - smol-toml（与主包一并打包）
  */
 
 import { load as yamlLoad } from 'js-yaml';
+import { parse as parseToml } from 'smol-toml';
 
 // ═══════════════════════════════════════════
 //  错误类
@@ -38,31 +39,6 @@ export function formatFormatParseDetails(e: FormatParseError): string {
   if (d.tomlError) lines.push(`TOML：${d.tomlError}`);
   if (d.yamlError) lines.push(`YAML：${d.yamlError}`);
   return lines.join('\n');
-}
-
-// ═══════════════════════════════════════════
-//  TOML 解析器（运行时 CDN 加载）
-// ═══════════════════════════════════════════
-
-let TOML: { parse: (text: string) => any } | null = null;
-
-/**
- * 加载 smol-toml（仅首次调用时从 CDN 加载）
- */
-async function ensureTOML(): Promise<typeof TOML> {
-  if (!TOML) {
-    try {
-      const module = await import(
-        // @ts-ignore - CDN URL import
-        'https://testingcf.jsdelivr.net/npm/smol-toml/+esm'
-      );
-      TOML = module.default || module;
-    } catch {
-      // TOML 不可用时（如网络问题），跳过 TOML 尝试
-      TOML = null;
-    }
-  }
-  return TOML;
 }
 
 // ═══════════════════════════════════════════
@@ -97,11 +73,8 @@ export async function parseStructuredText(text: string): Promise<Record<string, 
 
   // 2. 尝试 TOML
   try {
-    const toml = await ensureTOML();
-    if (toml) {
-      const result = toml.parse(cleaned);
-      return wrapIfNotObject(result);
-    }
+    const result = parseToml(cleaned);
+    return wrapIfNotObject(result);
   } catch (e) {
     errors.tomlError = (e as Error).message;
   }

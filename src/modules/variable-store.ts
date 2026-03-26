@@ -15,21 +15,22 @@
  * 所有读写操作自动深拷贝，避免外部意外修改持久化数据。
  */
 
+import { klona } from 'klona/full';
 import { getValueByPath, setValueByPath } from '../shared/path-utils.js';
-import type { StoreLayer } from '../types/index.js';
+import type { StoreLayer, VariableOption } from '../types/index.js';
 
 // ═══════════════════════════════════════════
 //  深拷贝
 // ═══════════════════════════════════════════
 
 /**
- * 深拷贝（优先使用 lodash _.cloneDeep，回退到 JSON）
+ * 深拷贝（主包内置 klona；若宿主提供 lodash 仍可优先使用）
  */
 function deepClone<T>(obj: T): T {
   if (typeof _ !== 'undefined' && typeof _.cloneDeep === 'function') {
     return _.cloneDeep(obj);
   }
-  return JSON.parse(JSON.stringify(obj));
+  return klona(obj);
 }
 
 // ═══════════════════════════════════════════

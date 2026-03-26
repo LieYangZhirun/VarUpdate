@@ -7,6 +7,7 @@
  * 生成变更日志（旧值 → 新值）。
  */
 
+import { safeParseWithContext } from '@vendor/schema-to-zod';
 import { getValueByPath, setValueByPath, deleteByPath, parsePath } from '../../shared/path-utils.js';
 import type { PatchInstruction, UpdateResult } from '../../types/index.js';
 import type { CompiledSchema } from '../schema-compiler/index.js';
@@ -22,14 +23,14 @@ import * as notify from '../notification.js';
  * @param instructions 指令数组（路径已通过反向解析确定）
  * @param currentData 当前变量状态的深拷贝
  * @param schema 已编译的 Schema（可选，用于逐条校验）
- * @param safeParseWithContext 由 schema-compiler.bindSafeParseWithContext 提供时可启用 refer()；缺省则退回 validator.safeParse（refer 不生效）
+ * @param boundSafeParse 由 bindSafeParseWithContext 提供时可启用 refer()；缺省则用 safeParseWithContext(schema, data, null)
  * @returns 执行结果
  */
 export function executeInstructions(
   instructions: PatchInstruction[],
   currentData: Record<string, any>,
   schema?: CompiledSchema,
-  safeParseWithContext?: (data: Record<string, any>) => { success: boolean; data?: any; error?: any },
+  boundSafeParse?: (data: Record<string, any>) => { success: boolean; data?: any; error?: any },
 ): UpdateResult {
   const result: UpdateResult = {
     data: currentData,
@@ -56,9 +57,10 @@ export function executeInstructions(
       }
 
       if (schema?.validator) {
-        const parseResult = safeParseWithContext
-          ? safeParseWithContext(result.data)
-          : schema.validator.safeParse(result.data);
+        // 无 bind 上下文时仍走 safeParseWithContext(..., null)，refer() 在 _ctx 为空时跳过，避免裸 safeParse 与 schema-to-zod 约定不一致
+        const parseResult = boundSafeParse
+          ? boundSafeParse(result.data)
+          : safeParseWithContext(schema, result.data, null);
         if (!parseResult.success) {
           result.data = snapshot;
           const errorMsg = parseResult.error?.issues

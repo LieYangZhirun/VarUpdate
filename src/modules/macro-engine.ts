@@ -10,37 +10,14 @@
  * 宏格式：{{message|chat|global/data|log|schema/可选路径}}
  */
 
+import { serializeToPromptalYAML } from '@vendor/promptal-yaml';
 import { readVariables } from './variable-store.js';
 import { getValueByPath } from '../shared/path-utils.js';
 import * as notify from './notification.js';
+import type { MacroLikeContext } from '../types/index.js';
 
 /** 与 ui-panel 一致：脚本设置占用此键；{{global/data}} 仅用于读取同层其它自定义键（若有） */
 const VARUPDATE_CONFIG_KEY = 'VarUpdate_config';
-
-// ═══════════════════════════════════════════
-//  CDN 模块引用（PromptalYAML）
-// ═══════════════════════════════════════════
-
-let promptalYaml: {
-  serializeToPromptalYAML: (value: any, indentLevel?: number) => string;
-} | null = null;
-
-let _loadAttempted = false;
-
-async function ensurePromptalYaml() {
-  if (promptalYaml) return promptalYaml;
-  if (_loadAttempted) return null;
-  _loadAttempted = true;
-  try {
-    promptalYaml = await import(
-      // @ts-ignore
-      'https://testingcf.jsdelivr.net/gh/LieYangZhirun/Promptal-YAML/dist/index.js'
-    );
-  } catch {
-    _loadAttempted = false; // 加载失败后允许重试
-  }
-  return promptalYaml;
-}
 
 // ═══════════════════════════════════════════
 //  宏注册状态
@@ -74,9 +51,6 @@ export function registerMacros(): () => void {
   if (macroUnregister) {
     return () => unregisterMacros();
   }
-
-  // 预加载 PromptalYAML（不阻塞注册流程）
-  void ensurePromptalYaml();
 
   try {
     if (typeof registerMacroLike === 'function') {
@@ -197,11 +171,7 @@ function formatValue(value: any): string {
     return String(value);
   }
 
-  if (promptalYaml) {
-    return promptalYaml.serializeToPromptalYAML(value);
-  }
-
-  return JSON.stringify(value, null, 2);
+  return serializeToPromptalYAML(value);
 }
 
 /**
