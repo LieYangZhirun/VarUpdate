@@ -1,5 +1,3 @@
 node_modules/
 package-lock.json
 *.tsbuildinfo
-架构设计/
-tests/

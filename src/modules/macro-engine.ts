@@ -13,6 +13,8 @@
 import { serializeToPromptalYAML } from '@vendor/promptal-yaml';
 import { readVariables } from './variable-store.js';
 import { getValueByPath } from '../shared/path-utils.js';
+import { filterMessageDataForMacro } from '../shared/filter-macro-data-by-schema-hide.js';
+import { getCachedSchema } from './schema-compiler/index.js';
 import * as notify from './notification.js';
 import type { MacroLikeContext } from '../types/index.js';
 
@@ -101,7 +103,25 @@ function macroReplacer(
   fullText: string,
 ): string {
   try {
-    const value = resolveValue(scope, field, varPath || '', context.message_id);
+    let value = resolveValue(scope, field, varPath || '', context.message_id);
+
+    let terminalHidden = false;
+    if (scope === 'message' && field === 'data') {
+      const compiled = getCachedSchema();
+      const msgLayer = readVariables('message', context.message_id);
+      const dataRoot = msgLayer.data;
+      if (compiled?.raw && dataRoot && typeof dataRoot === 'object' && !Array.isArray(dataRoot)) {
+        const fr = filterMessageDataForMacro(dataRoot, compiled.raw, varPath || '');
+        terminalHidden = fr.terminalHidden;
+        value = fr.value;
+      }
+    }
+
+    if (terminalHidden) {
+      // 路径恰好落在 $hide 节点：插入换行，形成空白行（不触发「引用为空」）
+      return '\n';
+    }
+
     if (value === undefined || value === null) {
       notify.notify(
         'notice',

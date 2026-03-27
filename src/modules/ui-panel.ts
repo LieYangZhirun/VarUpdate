@@ -62,8 +62,8 @@ const HELP: Record<string, { title: string; content: string }> = {
 <b>自动执行流程：</b><br>
 1. 聊天开始时 → 加载世界书中的 Schema 和 Default → 编译校验器<br>
 2. 开场白生成时 → 扫描 <code>&lt;Var_Initial&gt;</code> → 建立初始变量<br>
-3. 每条消息生成后 → 扫描 <code>&lt;Var_Update&gt;</code> → 校验并执行增量修改<br>
-4. 校验失败的指令被丢弃，成功的写入当前楼层<br><br>
+3. 每条消息生成后 → 若有标签则解析 <code>&lt;Var_Update&gt;</code> / <code>&lt;Var_Initial&gt;</code>；<b>无标签时从前一层继承变量</b>（本层变更记录清空）<br>
+4. Update 指令经宽松解析后逐条校验；失败条回滚，丢弃数超阈值则整次不应用<br><br>
 <b>在提示词中引用变量：</b><br>
 使用 <code>{{message/data/变量路径}}</code> 即可在提示词中插入变量值。例如 <code>{{message/data/角色/HP}}</code> → 80。`,
   },

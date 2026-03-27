@@ -1,5 +1,5 @@
 /**
- * schema-to-zod（内嵌副本，与仓库根目录 schema-to-zod 同步维护）
+ * schema-to-zod
  *
  * 声明式 Schema → Zod 编译器
  *
@@ -264,6 +264,9 @@ function applyConstraints(baseType: z.ZodType<any>, node: Record<string, any>, p
         break;
       case '$default':
         t = t.default(value) as any;
+        break;
+      case '$hide':
+        // 仅用于 VarUpdate 宏导出裁剪，不参与 Zod
         break;
       // $defs 在 compileSchema 顶层处理，此处忽略
       case '$defs':
