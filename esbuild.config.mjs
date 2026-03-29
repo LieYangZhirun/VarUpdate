@@ -15,6 +15,7 @@ build({
   target: 'es2020',
   sourcemap: isDev,
   minify: !isDev,
+  legalComments: 'external',
 }).then(() => {
   console.log(`✅ VarUpdate build complete (${isDev ? 'dev' : 'prod'}) — full bundle, no externals`);
 }).catch(() => process.exit(1));
