@@ -54,7 +54,7 @@ export function formatParseErrorDetails(e: FormatParseError): string {
  * @returns 解析后的对象
  * @throws {FormatParseError} 三种格式均无法解析时
  */
-export async function parseStructuredText(text: string): Promise<Record<string, any>> {
+export function parseStructuredText(text: string): Record<string, any> {
   const errors: { jsonError?: string; tomlError?: string; yamlError?: string } = {};
 
   // 清理输入

@@ -273,7 +273,7 @@ async function handleMessageContent(
     try {
       let mergedInitial: Record<string, any> | null = null;
       for (const tag of initialTags) {
-        const obj = await parseStructuredText(tag.content);
+        const obj = parseStructuredText(tag.content);
         mergedInitial =
           mergedInitial === null ? obj : mergeDeepWithConflictCheck(mergedInitial, obj);
       }
@@ -360,7 +360,7 @@ async function applyInitialMergedData(
     const schema = getCachedSchema();
     if (schema) {
       // 须走 safeParseWithContext，否则 Schema 中 refer() 不会在 Initial 阶段生效
-      const parseFn = await bindSafeParseWithContext(schema, {
+      const parseFn = bindSafeParseWithContext(schema, {
         resolveRef: (path: string) => getValueByPath(merged, path),
       });
       const zResult = parseFn(merged);
@@ -397,7 +397,7 @@ async function applyInitialMergedData(
       notify.success('变量初始化', `${Object.keys(finalData).length} 个顶层变量已初始化`, { category: 'msg' });
     }
 
-    await eventBus.emit(EVENTS.INITIALIZED, {
+    await eventBus.emit(EVENTS.VAR_INITIALIZED, {
       messageIndex: messageIndex ?? -1,
       data: finalData,
     });
@@ -456,7 +456,7 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
   } : undefined;
 
   try {
-    const result = await executeUpdate(
+    const result = executeUpdate(
       combinedText,
       dataCopy,
       schema || undefined,
@@ -476,7 +476,7 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
     }
 
     if (!rejectedByThreshold) {
-      await eventBus.emit(EVENTS.UPDATED, {
+      await eventBus.emit(EVENTS.VAR_UPDATED, {
         messageIndex,
         appliedCount: result.appliedCount,
         discardedCount,
@@ -493,7 +493,7 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
         `丢弃 ${discardedCount} 条指令，超过阈值 ${discardThreshold}，本层变量保持原状`,
         { category: 'pat' },
       );
-      await eventBus.emit(EVENTS.UPDATE_FAILED, {
+      await eventBus.emit(EVENTS.VAR_UPDATE_FAILED, {
         messageIndex,
         reason: `丢弃 ${discardedCount} 条指令（超过阈值 ${discardThreshold}）`,
         discardedCount,
@@ -504,7 +504,7 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
 
   } catch (e) {
     notify.error('更新执行失败', (e as Error).message, { category: 'pat' });
-    await eventBus.emit(EVENTS.UPDATE_FAILED, {
+    await eventBus.emit(EVENTS.VAR_UPDATE_FAILED, {
       messageIndex,
       reason: (e as Error).message,
       discardedCount: 0,
@@ -666,7 +666,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
         const trimmed = body.trim();
         if (!trimmed) continue;
         try {
-          const obj = await parseStructuredText(trimmed);
+          const obj = parseStructuredText(trimmed);
           mergedSchema = mergedSchema ? mergeDeepWithConflictCheck(mergedSchema, obj) : obj;
         } catch (e) {
           if (e instanceof FormatParseError) {
@@ -702,7 +702,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
 
     if (mergedSchema) {
       try {
-        const compiled = await compileSchemaFromData(mergedSchema);
+        const compiled = compileSchemaFromData(mergedSchema);
         chatData.schema = compiled.raw;
         chatData.schemaStatus = 'compiled';
         const n = schemaTagged.filter(t => t.body.trim()).length;
@@ -710,7 +710,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
 
         tryRegisterMessageLayerVariableSchema(compiled.validator as z.ZodTypeAny);
 
-        await eventBus.emit(EVENTS.SCHEMA_READY, { defNames: compiled.defNames });
+        await eventBus.emit(EVENTS.VAR_SCHEMA_READY, { defNames: compiled.defNames });
       } catch (e) {
         ok = false;
         chatData.schemaStatus = 'error';
@@ -727,7 +727,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
         const trimmed = body.trim();
         if (!trimmed) continue;
         try {
-          const obj = await parseStructuredText(trimmed);
+          const obj = parseStructuredText(trimmed);
           mergedDefault = mergedDefault ? mergeDeepWithConflictCheck(mergedDefault, obj) : obj;
         } catch (e) {
           if (e instanceof FormatParseError) {
@@ -777,9 +777,9 @@ async function loadSchema(): Promise<void> {
   try {
     const chatData = readVariables('chat');
     if (chatData.schema && chatData.schemaStatus === 'compiled') {
-      const compiled = await compileSchemaFromData(chatData.schema);
+      const compiled = compileSchemaFromData(chatData.schema);
       tryRegisterMessageLayerVariableSchema(compiled.validator as z.ZodTypeAny);
-      await eventBus.emit(EVENTS.SCHEMA_READY, { defNames: compiled.defNames });
+      await eventBus.emit(EVENTS.VAR_SCHEMA_READY, { defNames: compiled.defNames });
       return;
     }
     // 含 schemaStatus===compiled 但缺 schema 等异常态，统一走世界书重载

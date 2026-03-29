@@ -114,7 +114,7 @@ npm run test:watch
 
 - **语言**：TypeScript → esbuild 打包为单文件 ESM
 - **运行时**：SillyTavern iframe（浏览器环境，ES2020）
-- **核心依赖**：Zod（npm 打入 bundle + iframe 全局 `z`）、js-yaml（全局 + bundle）、smol-toml、klona、json5
+- **核心依赖**：运行时 Zod 使用 iframe 全局 `z`（源码不 `import 'zod'`；`zod` 仅作 devDependency 供类型检查）；js-yaml 以全局 `YAML` 为主；`smol-toml`、`klona`、`json5` 打入 bundle
 - **测试**：vitest
 
 ## 错误处理

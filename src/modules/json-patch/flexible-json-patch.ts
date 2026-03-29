@@ -18,14 +18,8 @@ import JSON5 from 'json5';
 //  公开类型
 // ═══════════════════════════════════════════
 
-/**
- * 标准化后的 Patch 指令
- */
-export interface PatchInstruction {
-  op: 'replace' | 'insert' | 'delete';
-  path: string;
-  value?: any;
-}
+import type { PatchInstruction } from '../../types/index.js';
+export type { PatchInstruction };
 
 /**
  * 解析结果
@@ -372,10 +366,7 @@ import { ScriptError } from '../../types/index.js';
  * Patch 解析失败错误
  */
 export class PatchParseError extends ScriptError {
-  constructor(
-    message: string,
-    public readonly context: Record<string, any> = {}
-  ) {
+  constructor(message: string, context: Record<string, any> = {}) {
     super(message, context);
     this.name = 'PatchParseError';
   }

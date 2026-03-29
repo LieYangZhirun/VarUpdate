@@ -50,11 +50,11 @@ function computeCacheKey(data: Record<string, any>): string {
  * @param schemaText Schema 文本（YAML/JSON/TOML 格式）
  * @returns 编译后的 Schema 对象
  */
-export async function compileSchemaFromText(schemaText: string): Promise<CompiledSchema> {
+export function compileSchemaFromText(schemaText: string): CompiledSchema {
   // 步骤 1：解析文本
   let schemaData: Record<string, any>;
   try {
-    schemaData = await parseStructuredText(schemaText);
+    schemaData = parseStructuredText(schemaText);
   } catch (e) {
     if (e instanceof FormatParseError) {
       notify.error('Schema 解析失败', e.message, { category: 'sch' });
@@ -85,7 +85,7 @@ export async function compileSchemaFromText(schemaText: string): Promise<Compile
 /**
  * 从已解析的 JSON 对象编译 Schema（跳过文本解析步骤）
  */
-export async function compileSchemaFromData(schemaData: Record<string, any>): Promise<CompiledSchema> {
+export function compileSchemaFromData(schemaData: Record<string, any>): CompiledSchema {
   const cacheKey = computeCacheKey(schemaData);
   if (cachedSchema && cachedSchemaKey === cacheKey) {
     return cachedSchema;
@@ -105,11 +105,11 @@ export async function compileSchemaFromData(schemaData: Record<string, any>): Pr
 /**
  * 使用已编译的 Schema 校验数据
  */
-export async function validate(
+export function validate(
   schema: CompiledSchema,
   data: Record<string, any>,
   context: ValidationContext,
-): Promise<ValidationResult> {
+): ValidationResult {
   return validateWithSchema(schema, data, context);
 }
 
@@ -132,10 +132,10 @@ export function getCachedSchema(): CompiledSchema | null {
  * 绑定带 ValidationContext 的 safeParse，供 JSON Patch 逐条校验时启用 refer()。
  * 闭包内使用传入的 schema；data 每次由调用方传入当前快照（须与 Patch 正在变异的对象为同一引用链上的读视图）。
  */
-export async function bindSafeParseWithContext(
+export function bindSafeParseWithContext(
   schema: CompiledSchema,
   context: ValidationContext | undefined,
-): Promise<(data: Record<string, any>) => { success: boolean; data?: any; error?: any }> {
+): (data: Record<string, any>) => { success: boolean; data?: any; error?: any } {
   const ctx = context ?? null;
   return (data: Record<string, any>) => safeParseWithContext(schema, data, ctx);
 }

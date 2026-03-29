@@ -96,10 +96,10 @@ export function removeAll(): void {
 
 export const EVENTS = {
   // VarUpdate 广播
-  INITIALIZED: 'varupdate:initialized',
-  UPDATED: 'varupdate:updated',
-  UPDATE_FAILED: 'varupdate:update_failed',
-  SCHEMA_READY: 'varupdate:schema_ready',
+  VAR_INITIALIZED: 'varupdate:initialized',
+  VAR_UPDATED: 'varupdate:updated',
+  VAR_UPDATE_FAILED: 'varupdate:update_failed',
+  VAR_SCHEMA_READY: 'varupdate:schema_ready',
 
   // VarUpdate 监听（来自 Agents）
   MESSAGE_COMPLETE: 'agents:message_complete',

@@ -88,7 +88,7 @@ export function clearMessageVariablesAfter(messageIndex: number): void {
 }
 
 /** 酒馆在 splice 后仍可能残留高下标槽位时的清扫宽度 */
-const ORPHAN_MESSAGE_VAR_SWEEP = 256;
+const ORPHAN_MESSAGE_VAR_SWEEP = 2048;
 
 /**
  * SillyTavern `message_deleted` 传入的是**删除后**的 `chat.length`（见 script.js emit），

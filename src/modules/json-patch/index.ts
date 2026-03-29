@@ -29,12 +29,12 @@ import type { CompiledSchema, ValidationContext } from '../schema-compiler/index
  * @param context 校验上下文（可选，供 refer()；内部会绑定为 safeParseWithContext）
  * @returns 执行结果
  */
-export async function executeUpdate(
+export function executeUpdate(
   rawText: string,
   currentData: Record<string, any>,
   schema?: CompiledSchema,
   context?: ValidationContext
-): Promise<UpdateResult> {
+): UpdateResult {
 
   // ═══ 第一层：指令预处理 ═══
   let parseResult;
@@ -98,7 +98,7 @@ export async function executeUpdate(
   // ═══ 第三层：执行与校验（带 refer 时需 bindSafeParseWithContext） ═══
   let safeParseBound: ((d: Record<string, any>) => { success: boolean; data?: any; error?: any }) | undefined;
   if (schema) {
-    safeParseBound = await bindSafeParseWithContext(schema, context);
+    safeParseBound = bindSafeParseWithContext(schema, context);
   }
 
   const execResult = executeInstructions(

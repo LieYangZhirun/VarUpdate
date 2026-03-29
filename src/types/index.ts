@@ -55,6 +55,9 @@ declare global {
 
   const $: unknown;
 
+  /** Zod（由酒馆助手注入） */
+  const z: typeof import('zod');
+
   function eventEmit(eventName: string, ...args: unknown[]): Promise<void>;
   function eventOn(eventName: string, handler: (...args: unknown[]) => void): { stop: () => void };
   function eventOnce(eventName: string, handler: (...args: unknown[]) => void): { stop: () => void };
