@@ -1,6 +1,6 @@
 /**
- * 深度合并对象：同一路径出现不一致定义时抛出，不静默覆盖。
- * 用于多条世界书 [Var_Schema] / [Var_Default] 条目合并。
+ * 深度合并：同一键路径上已有值与新值不一致时抛出 `MergeConflictError`，不静默覆盖。
+ * 用于多条世界书 `[Var_Schema]` / `[Var_Default]` 条目的合并。
  */
 
 export class MergeConflictError extends Error {

@@ -5,19 +5,19 @@
  *
  * 接收一段结构化文本，自动检测格式（JSON → TOML → YAML），解析为 JavaScript 对象。
  *
- * 依赖：
- * - YAML：优先使用 iframe 全局 YAML；否则使用打包的 js-yaml（酒馆助手 iframe 常无全局 YAML）
- * - smol-toml（与主包一并打包）
+ * 依赖：YAML 优先使用宿主全局 `YAML`，否则使用随 bundle 打包的 `js-yaml`；TOML 使用 `smol-toml`。
  */
 
 import { load as yamlLoad } from 'js-yaml';
 import { parse as parseToml } from 'smol-toml';
 
+import { ScriptError } from '../types/index.js';
+
 // ═══════════════════════════════════════════
 //  错误类
 // ═══════════════════════════════════════════
 
-export class FormatParseError extends Error {
+export class FormatParseError extends ScriptError {
   constructor(
     message: string,
     public readonly details: {
@@ -26,13 +26,13 @@ export class FormatParseError extends Error {
       yamlError?: string;
     }
   ) {
-    super(message);
+    super(message, details);
     this.name = 'FormatParseError';
   }
 }
 
 /** 将解析失败信息展开为可读多行文本（用于 toastr / 日志） */
-export function formatFormatParseDetails(e: FormatParseError): string {
+export function formatParseErrorDetails(e: FormatParseError): string {
   const d = e.details;
   const lines = [e.message];
   if (d.jsonError) lines.push(`JSON：${d.jsonError}`);

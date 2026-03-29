@@ -3,22 +3,20 @@
  *
  * 模块 2：Schema 编译器
  *
- * 对 schema-to-zod 的封装层（与主包一并打包），添加 VarUpdate 特有功能：
- * - 与模块 1（格式解析器）集成
- * - Schema 缓存（避免重复编译）
- * - 与通知系统集成（编译错误 → L3 通知）
+ * 对 `schema-to-zod` 编译核心的封装：格式解析衔接、编译结果缓存、编译失败时错误通知，
+ * 以及供 Patch 逐条校验使用的 `bindSafeParseWithContext`。
  */
 
 import {
   compileSchema,
   validateWithSchema,
   safeParseWithContext,
-} from '@vendor/schema-to-zod';
+} from './schema-to-zod.js';
 import type {
   CompiledSchema,
   ValidationContext,
   ValidationResult,
-} from '@vendor/schema-to-zod';
+} from './schema-to-zod.js';
 import { parseStructuredText, FormatParseError } from '../format-parser.js';
 import * as notify from '../notification.js';
 
@@ -29,12 +27,12 @@ export type { CompiledSchema, ValidationContext, ValidationResult };
 // ═══════════════════════════════════════════
 
 let cachedSchema: CompiledSchema | null = null;
-let cachedSchemaHash: string | null = null;
+let cachedSchemaKey: string | null = null;
 
 /**
- * 计算简单的对象哈希（用于缓存判断）
+ * 计算 Schema 对象的缓存键（JSON 序列化字符串，用于判断是否与已缓存内容相同）
  */
-function computeHash(data: Record<string, any>): string {
+function computeCacheKey(data: Record<string, any>): string {
   return JSON.stringify(data);
 }
 
@@ -59,15 +57,15 @@ export async function compileSchemaFromText(schemaText: string): Promise<Compile
     schemaData = await parseStructuredText(schemaText);
   } catch (e) {
     if (e instanceof FormatParseError) {
-      notify.error('Schema 解析失败', e.message);
+      notify.error('Schema 解析失败', e.message, { category: 'sch' });
     }
     throw e;
   }
 
   // 步骤 2：检查缓存
-  const hash = computeHash(schemaData);
-  if (cachedSchema && cachedSchemaHash === hash) {
-    notify.debug('Schema 缓存命中', '使用已编译的 Schema');
+  const cacheKey = computeCacheKey(schemaData);
+  if (cachedSchema && cachedSchemaKey === cacheKey) {
+    notify.trace('Schema 缓存命中', '使用已编译的 Schema', 'sch');
     return cachedSchema;
   }
 
@@ -75,11 +73,11 @@ export async function compileSchemaFromText(schemaText: string): Promise<Compile
   try {
     const compiled = compileSchema(schemaData);
     cachedSchema = compiled;
-    cachedSchemaHash = hash;
-    notify.success('Schema 编译成功', `定义了 ${compiled.defNames.length} 个结构体`);
+    cachedSchemaKey = cacheKey;
+    notify.success('Schema 编译成功', `定义了 ${compiled.defNames.length} 个结构体`, { category: 'sch' });
     return compiled;
   } catch (e) {
-    notify.error('Schema 编译失败', (e as Error).message);
+    notify.error('Schema 编译失败', (e as Error).message, { category: 'sch' });
     throw e;
   }
 }
@@ -88,18 +86,18 @@ export async function compileSchemaFromText(schemaText: string): Promise<Compile
  * 从已解析的 JSON 对象编译 Schema（跳过文本解析步骤）
  */
 export async function compileSchemaFromData(schemaData: Record<string, any>): Promise<CompiledSchema> {
-  const hash = computeHash(schemaData);
-  if (cachedSchema && cachedSchemaHash === hash) {
+  const cacheKey = computeCacheKey(schemaData);
+  if (cachedSchema && cachedSchemaKey === cacheKey) {
     return cachedSchema;
   }
 
   try {
     const compiled = compileSchema(schemaData);
     cachedSchema = compiled;
-    cachedSchemaHash = hash;
+    cachedSchemaKey = cacheKey;
     return compiled;
   } catch (e) {
-    notify.error('Schema 编译失败', (e as Error).message);
+    notify.error('Schema 编译失败', (e as Error).message, { category: 'sch' });
     throw e;
   }
 }
@@ -120,7 +118,7 @@ export async function validate(
  */
 export function clearCache(): void {
   cachedSchema = null;
-  cachedSchemaHash = null;
+  cachedSchemaKey = null;
 }
 
 /**

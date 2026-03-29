@@ -17,6 +17,8 @@
  * - varupdate:retry_requested   重试请求
  */
 
+import * as notify from './notification.js';
+
 // ═══════════════════════════════════════════
 //  监听器追踪（用于 removeAll）
 // ═══════════════════════════════════════════
@@ -36,7 +38,7 @@ export async function emit(eventName: string, payload: any): Promise<void> {
       await eventEmit(eventName, payload);
     }
   } catch (e) {
-    console.error(`[VarUpdate] 事件广播失败: ${eventName}`, e);
+    notify.bridgeError(`事件广播失败 · ${eventName}`, e);
   }
 }
 
@@ -51,7 +53,7 @@ export function on(eventName: string, handler: (payload: any) => void): { stop: 
       return listener;
     }
   } catch (e) {
-    console.error(`[VarUpdate] 事件监听失败: ${eventName}`, e);
+    notify.bridgeError(`事件监听失败 · ${eventName}`, e);
   }
   return { stop: () => {} };
 }
@@ -67,19 +69,17 @@ export function once(eventName: string, handler: (payload: any) => void): { stop
       return listener;
     }
   } catch (e) {
-    console.error(`[VarUpdate] 一次性监听失败: ${eventName}`, e);
+    notify.bridgeError(`一次性监听失败 · ${eventName}`, e);
   }
   return { stop: () => {} };
 }
 
 /**
- * 注销所有由本脚本注册的事件监听器
+ * 注销本脚本注册的全部事件监听。
  *
- * 使用 eventClearAll 一次性清理本 iframe 的所有监听器。
- * 该函数是酒馆助手绑定到当前 iframe 的，只会清理本 iframe 注册的监听。
+ * 先调用宿主 `eventClearAll()`，再清空本地追踪列表，避免清理失败时过早丢失重试所需引用。
  */
 export function removeAll(): void {
-  registeredListeners.length = 0;
   try {
     if (typeof eventClearAll === 'function') {
       eventClearAll();
@@ -87,6 +87,7 @@ export function removeAll(): void {
   } catch {
     // 静默
   }
+  registeredListeners.length = 0;
 }
 
 // ═══════════════════════════════════════════

@@ -3,11 +3,8 @@
  *
  * 模块 9：UI 面板
  *
- * 参考 MVU Panel.vue 的实现模式：
- * - 挂载到 #extensions_settings2（酒馆助手脚本面板区域）
- * - 使用 inline-drawer（由宿主 jQuery 自动处理折叠）
- * - 帮助图标 fa-circle-question + callGenericPopup 弹窗
- * - 样式通过 teleportStyle 传送到宿主 <head>
+ * 实现要点：挂载于 `#extensions_settings2`；`inline-drawer` 折叠由宿主 jQuery 处理；
+ * 帮助入口使用 `fa-circle-question` 与 `callGenericPopup`；样式经 teleport 写入宿主 `<head>`。
  *
  * H-1 独立面板：
  *   1. 使用指南按钮
@@ -21,14 +18,11 @@
 
 import * as notify from './notification.js';
 import { readVariables, writeVariables } from './variable-store.js';
-import type { NotifyLevel } from '../types/index.js';
+import { VARUPDATE_CONFIG_KEY, type NotifyLevel } from '../types/index.js';
 
 // ═══════════════════════════════════════════
 //  常量
 // ═══════════════════════════════════════════
-
-/** 持久化存储键名 */
-const CONFIG_KEY = 'VarUpdate_config';
 
 const PANEL_ROOT_ID = 'varupdate-settings';
 const TELEPORTED_STYLE_ID = 'varupdate-teleported-style';
@@ -47,7 +41,7 @@ function getHostDocument(): Document {
 }
 
 // ═══════════════════════════════════════════
-//  帮助弹窗内容（HTML 格式，参考 MVU helpTexts）
+//  帮助弹窗（HTML，供 callGenericPopup / toastr / alert 回退）
 // ═══════════════════════════════════════════
 
 const HELP: Record<string, { title: string; content: string }> = {
@@ -189,7 +183,7 @@ function showHelp(key: string): void {
 }
 
 // ═══════════════════════════════════════════
-//  面板 CSS（参考 MVU scoped style）
+//  面板样式（`.varupdate-*`，teleport 到宿主 head）
 // ═══════════════════════════════════════════
 
 const PANEL_CSS = `
@@ -343,7 +337,7 @@ interface PanelCallbacks {
 let callbacks: PanelCallbacks = {};
 
 // ═══════════════════════════════════════════
-//  样式传送（参考 MVU teleportStyle）
+//  样式插入宿主文档
 // ═══════════════════════════════════════════
 
 function teleportStyle(): void {
@@ -365,13 +359,6 @@ function teleportStyle(): void {
 export function renderPanel(cbs: PanelCallbacks = {}): void {
   callbacks = cbs;
 
-  // 清除旧版本注册的快捷按钮
-  try {
-    if (typeof replaceScriptButtons === 'function') {
-      replaceScriptButtons([]);
-    }
-  } catch { /* 静默 */ }
-
   try {
     const hostDoc = getHostDocument();
     if (hostDoc.getElementById(PANEL_ROOT_ID)) return;
@@ -379,11 +366,10 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
     // 传送样式到宿主 <head>
     teleportStyle();
 
-    // 挂载到 #extensions_settings2（参考 MVU）
     const container = hostDoc.getElementById('extensions_settings2')
       || hostDoc.getElementById('extensions_settings');
     if (!container) {
-      notify.debug('面板', '#extensions_settings2 未找到');
+      notify.debug('面板', '#extensions_settings2 未找到', { category: 'ui' });
       return;
     }
 
@@ -422,18 +408,12 @@ export function renderPanel(cbs: PanelCallbacks = {}): void {
     loadSettings(hostDoc);
 
   } catch (e) {
-    notify.warning('面板', `渲染失败: ${(e as Error).message}`);
+    notify.warning('面板', `渲染失败: ${(e as Error).message}`, { category: 'ui' });
   }
 }
 
 /**
- * H-2 魔棒快捷按钮
- *
- * 通过 Teleport 到 #extensionsMenu（与酒馆助手 Toolbox.vue 同模式）
- * 向魔棒弹出菜单注入自定义条目。
- */
-/**
- * 脚本卸载时拆除注入到宿主文档的 UI（设置面板、魔棒菜单项、teleport 样式）
+ * 卸载时移除设置面板、魔棒注入项及 teleport 的 `<style>`。
  */
 export function destroyPanel(): void {
   try {
@@ -454,12 +434,15 @@ export function destroyPanel(): void {
   }
 }
 
+/**
+ * H-2：在 `#extensionsMenu` 中注入两条魔棒菜单项（结构与宿主列表项一致）。
+ */
 export function registerWandButtons(): void {
   try {
     const hostDoc = getHostDocument();
     const menu = hostDoc.getElementById('extensionsMenu');
     if (!menu) {
-      notify.debug('魔棒', '#extensionsMenu 未找到');
+      notify.debug('魔棒', '#extensionsMenu 未找到', { category: 'ui' });
       return;
     }
 
@@ -478,7 +461,7 @@ export function registerWandButtons(): void {
     });
 
   } catch (e) {
-    notify.debug('魔棒', `注册失败: ${(e as Error).message}`);
+    notify.debug('魔棒', `注册失败: ${(e as Error).message}`, { category: 'ui' });
   }
 }
 
@@ -502,11 +485,9 @@ export function getPanelSettings(): {
   }
 }
 
-/**
- * 调试输出（功能卡未定义调试区，仅控制台）
- */
+/** 将当前 message `data` 快照交给通知系统（受通知等级约束，见 `logStateSnapshot`）。 */
 export function refreshDebugState(data: Record<string, any>): void {
-  console.log('%c[VarUpdate] 变量状态:', 'color: #50C878; font-weight: bold;', data);
+  notify.logStateSnapshot(data);
 }
 
 // ═══════════════════════════════════════════
@@ -549,7 +530,7 @@ function addWandMenuItem(
 function loadSettings(hostDoc: Document): void {
   try {
     const globalData = readVariables('global');
-    const s = globalData[CONFIG_KEY];
+    const s = globalData[VARUPDATE_CONFIG_KEY];
     if (!s) return;
 
     if (s.notifyLevel) {
@@ -574,13 +555,28 @@ function loadSettings(hostDoc: Document): void {
 
 function saveSettings(hostDoc: Document): void {
   try {
-    const globalData = readVariables('global');
-    globalData[CONFIG_KEY] = {
-      notifyLevel: notify.getLevel(),
-      autoInitialize: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
-      discardThreshold: parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10),
-      retentionDepth: parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10),
-    };
-    writeVariables('global', globalData);
+    // 使用 updateVariablesWith 保证原子性读-改-写
+    const option = { type: 'global' as const };
+    if (typeof updateVariablesWith === 'function') {
+      updateVariablesWith((globalData) => {
+        globalData[VARUPDATE_CONFIG_KEY] = {
+          notifyLevel: notify.getLevel(),
+          autoInitialize: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
+          discardThreshold: parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10),
+          retentionDepth: parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10),
+        };
+        return globalData;
+      }, option);
+    } else {
+      // fallback：手动读-改-写（updateVariablesWith 不可用时）
+      const globalData = readVariables('global');
+      globalData[VARUPDATE_CONFIG_KEY] = {
+        notifyLevel: notify.getLevel(),
+        autoInitialize: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
+        discardThreshold: parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10),
+        retentionDepth: parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10),
+      };
+      writeVariables('global', globalData);
+    }
   } catch { /* 静默 */ }
 }

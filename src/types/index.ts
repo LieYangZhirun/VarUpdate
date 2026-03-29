@@ -1,7 +1,7 @@
 /**
  * VarUpdate 类型定义
  *
- * 本文件为 ES 模块：iframe 注入的全局符号必须写在 `declare global` 内，否则不会合并到全局作用域。
+ * ES 模块文件：由宿主注入的 iframe 全局 API 须在 `declare global` 中声明，方可与业务代码的类型合并。
  */
 
 // ═══════════════════════════════════════════
@@ -95,6 +95,9 @@ declare global {
 /** 存储层级 */
 export type StoreLayer = 'global' | 'chat' | 'message';
 
+/** global 层脚本设置对象的存储键（ui-panel、macro-engine 与文档约定一致） */
+export const VARUPDATE_CONFIG_KEY = 'VarUpdate_config' as const;
+
 /** 通知等级 */
 export type NotifyLevel = 'debug' | 'always' | 'notice' | 'error' | 'silence';
 
@@ -118,6 +121,17 @@ export interface ExtractionResult {
   truncated: boolean;
   /** 截断的标签类型 */
   truncatedType?: 'initial' | 'update';
+}
+
+// ─── 错误基类 ───
+export class ScriptError extends Error {
+  constructor(
+    message: string,
+    public readonly context: Record<string, any> = {}
+  ) {
+    super(message);
+    this.name = this.constructor.name;
+  }
 }
 
 // ─── JSON Patch ───

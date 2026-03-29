@@ -1,5 +1,5 @@
 /**
- * promptal-yaml（内嵌副本，与仓库根目录 promptal-yaml 同步维护）
+ * shared/promptal-yaml.ts
  *
  * PromptalYAML 序列化器 —— AI 提示词友好的结构化文本格式
  *

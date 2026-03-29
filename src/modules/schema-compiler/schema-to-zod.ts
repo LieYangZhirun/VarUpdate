@@ -6,7 +6,7 @@
  * @module schema-to-zod
  */
 
-import { z } from 'zod';
+// z（Zod）由酒馆助手注入到 iframe 全局，无需 import
 
 // ═══════════════════════════════════════════
 //  公开类型
@@ -27,12 +27,14 @@ export interface ValidationResult {
   errors: Array<{ path: string; message: string; expected: string; received: any }>;
 }
 
-export class SchemaCompileError extends Error {
+import { ScriptError } from '../../types/index.js';
+
+export class SchemaCompileError extends ScriptError {
   constructor(
     message: string,
     public readonly errors: Array<{ path: string; message: string }> = []
   ) {
-    super(message);
+    super(message, { errors });
     this.name = 'SchemaCompileError';
   }
 }

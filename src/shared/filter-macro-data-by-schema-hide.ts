@@ -1,6 +1,6 @@
 /**
- * 根据 Schema 中的 $hide: true 裁剪宏导出数据（不修改入参）。
- * 用于 {{message/data}} 等注入前避免把「作者不想进上下文」的子树序列化进 Prompt。
+ * 按 Schema 中 `$hide: true` 裁剪待注入数据（不修改入参对象）。
+ * 供 `{{message/data/…}}` 等宏在序列化前省略作者指定隐藏的子树（规则见面向用户功能卡 · K-2）。
  */
 
 import { getValueByPath, parsePath } from './path-utils.js';

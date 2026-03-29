@@ -1,5 +1,5 @@
 /**
- * flexible-json-patch（内嵌副本，与仓库根目录 flexible-json-patch 同步维护）
+ * modules/json-patch/flexible-json-patch.ts
  *
  * 容错 JSON Patch 解析器 —— 最大限度容忍 AI 模型输出的格式偏差
  *
@@ -366,15 +366,17 @@ function upgradeSingleQuotesInValues(data: any): any {
 //  错误类
 // ═══════════════════════════════════════════
 
+import { ScriptError } from '../../types/index.js';
+
 /**
  * Patch 解析失败错误
  */
-export class PatchParseError extends Error {
+export class PatchParseError extends ScriptError {
   constructor(
     message: string,
     public readonly context: Record<string, any> = {}
   ) {
-    super(message);
+    super(message, context);
     this.name = 'PatchParseError';
   }
 }

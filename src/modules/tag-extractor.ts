@@ -6,8 +6,8 @@
  * 从消息文本中识别并提取 <Var_Initial> / <Var_Update> 标签及其内容。
  * 采用分步检测策略：先确认开标签存在，再检查闭标签完整性。
  *
- * 标签名标准化规则：转小写 → 移除下划线 → 匹配
- * 支持宽松命名：VarUpdate / var_update / variable_update 等均等价
+ * 标签名标准化：转小写并去掉下划线、连字符后与已知别名集合比对；
+ * 如 `VarUpdate`、`var_update`、`variable_update` 等均视为同一标签族。
  */
 
 import type { ExtractedTag, ExtractionResult } from '../types/index.js';

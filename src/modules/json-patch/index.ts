@@ -3,13 +3,10 @@
  *
  * 模块 3：JSON Patch 引擎 —— 主入口
  *
- * 编排三层管道：
- * 1. 指令预处理（公共库 flexible-json-patch）
- * 2. 反向路径解析
- * 3. 执行与校验
+ * 编排三层管道：① flexible-json-patch 预处理 ② 反向路径解析 ③ 执行与逐条校验。
  */
 
-import { parseInstructions } from '@vendor/flexible-json-patch';
+import { parseInstructions } from './flexible-json-patch.js';
 import { resolvePath } from './path-resolver.js';
 import { executeInstructions } from './executor.js';
 import * as notify from '../notification.js';
@@ -45,7 +42,7 @@ export async function executeUpdate(
     parseResult = parseInstructions(rawText);
   } catch (e) {
     // F-2: 整段解析失败 → 抛出异常，由 handleUpdate 广播 UPDATE_FAILED
-    notify.error('指令解析失败', (e as Error).message);
+    notify.error('指令解析失败', (e as Error).message, { category: 'pat' });
     throw e;
   }
 
@@ -53,12 +50,13 @@ export async function executeUpdate(
   if (parseResult.discarded.length > 0) {
     notify.warning(
       '指令预处理',
-      `${parseResult.discarded.length} 条指令格式不合法被丢弃`
+      `${parseResult.discarded.length} 条指令格式不合法被丢弃`,
+      { category: 'pat' },
     );
   }
 
   if (parseResult.instructions.length === 0) {
-    notify.warning('指令为空', '预处理后无有效指令');
+    notify.warning('指令为空', '预处理后无有效指令', { category: 'pat' });
     return {
       data: currentData,
       appliedCount: 0,
@@ -76,10 +74,10 @@ export async function executeUpdate(
 
     if ('reason' in result) {
       pathDiscarded.push({ instruction, reason: result.reason });
-      notify.debug('路径解析失败', `${instruction.path}: ${result.reason}`);
+      notify.trace('路径解析失败', `${instruction.path}: ${result.reason}`, 'pat');
     } else {
       if (result.corrected) {
-        notify.debug('路径修正', `${result.original} → ${result.resolved}`);
+        notify.trace('路径修正', `${result.original} → ${result.resolved}`, 'pat');
       }
       resolvedInstructions.push({
         ...instruction,
@@ -118,7 +116,8 @@ export async function executeUpdate(
     notify.success(
       '变量更新完成',
       `${execResult.appliedCount} 条指令执行成功` +
-      (execResult.discarded.length > 0 ? `，${execResult.discarded.length} 条被丢弃` : '')
+      (execResult.discarded.length > 0 ? `，${execResult.discarded.length} 条被丢弃` : ''),
+      { category: 'pat' },
     );
   }
 

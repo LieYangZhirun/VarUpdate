@@ -1,18 +1,13 @@
 /**
- * modules/variable-store.ts
+ * modules/variable-store.ts —— 模块 4：变量存储适配层
  *
- * 模块 4：变量存储适配层
+ * 封装酒馆助手 `getVariables` / `replaceVariables`（由助手在 iframe 上绑定的全局函数），
+ * 对业务暴露统一的读、写、按路径读写接口。
  *
- * 对酒馆助手多层变量系统的封装，提供统一的变量 CRUD 接口。
- * 使用 iframe 全局函数 getVariables / replaceVariables（由 predefine.js 从
- * TavernHelper._bind 解构并绑定到 iframe window）。
+ * 层级约定：`global`（脚本设置，跨会话）、`chat`（Schema / Default，随当前聊天）、
+ * `message`（单条消息的变量快照，含 swipe）。
  *
- * 三个存储层级：
- * - global：全局设置（通知等级、容错阈值等），跨角色卡跨聊天
- * - chat：当前聊天会话（Schema、Default 等），切换聊天时随之切换
- * - message：消息粒度（变量快照），每条消息独立
- *
- * 所有读写操作自动深拷贝，避免外部意外修改持久化数据。
+ * 读返回与写提交均经深拷贝，降低调用方意外改动持久化数据的风险。
  */
 
 import { klona } from 'klona/full';
@@ -26,7 +21,7 @@ import type { StoreLayer, VariableOption } from '../types/index.js';
 /**
  * 深拷贝（主包内置 klona；若宿主提供 lodash 仍可优先使用）
  */
-function deepClone<T>(obj: T): T {
+export function deepClone<T>(obj: T): T {
   if (typeof _ !== 'undefined' && typeof _.cloneDeep === 'function') {
     return _.cloneDeep(obj);
   }

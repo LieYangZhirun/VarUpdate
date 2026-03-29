@@ -4,22 +4,18 @@
  * 模块 6：插值宏引擎
  *
  * 通过酒馆助手的 registerMacroLike API 注册自定义宏。
- * 在消息发送前将 {{作用域/字段/路径}} 格式的宏替换为变量的实际值。
- * 复合类型使用 PromptalYAML 序列化。
+ * 在消息发送前将 `{{作用域/字段/路径}}` 替换为变量值；对象 / 数组等复合类型经 PromptalYAML 序列化。
  *
  * 宏格式：{{message|chat|global/data|log|schema/可选路径}}
  */
 
-import { serializeToPromptalYAML } from '@vendor/promptal-yaml';
+import { serializeToPromptalYAML } from '../shared/promptal-yaml.js';
 import { readVariables } from './variable-store.js';
 import { getValueByPath } from '../shared/path-utils.js';
 import { filterMessageDataForMacro } from '../shared/filter-macro-data-by-schema-hide.js';
 import { getCachedSchema } from './schema-compiler/index.js';
 import * as notify from './notification.js';
-import type { MacroLikeContext } from '../types/index.js';
-
-/** 与 ui-panel 一致：脚本设置占用此键；{{global/data}} 仅用于读取同层其它自定义键（若有） */
-const VARUPDATE_CONFIG_KEY = 'VarUpdate_config';
+import { VARUPDATE_CONFIG_KEY, type MacroLikeContext } from '../types/index.js';
 
 // ═══════════════════════════════════════════
 //  宏注册状态
@@ -60,7 +56,7 @@ export function registerMacros(): () => void {
       macroUnregister = result.unregister;
     }
   } catch (e) {
-    notify.warning('宏注册', `注册宏失败: ${(e as Error).message}`);
+    notify.warning('宏注册', `注册宏失败: ${(e as Error).message}`, { category: 'mac' });
   }
 
   return () => unregisterMacros();
@@ -123,17 +119,17 @@ function macroReplacer(
     }
 
     if (value === undefined || value === null) {
-      notify.notify(
-        'notice',
+      notify.warning(
         '宏引用为空',
         `${scope}/${field}${varPath ? `/${varPath}` : ''}`,
+        { category: 'mac' },
       );
     }
     const output = formatValue(value);
     const leadingSpaces = countLeadingSpaces(fullText, offset);
     return alignIndent(output, leadingSpaces);
   } catch (e) {
-    notify.debug('宏替换失败', `${substring}: ${(e as Error).message}`);
+    notify.trace('宏替换失败', `${substring}: ${(e as Error).message}`, 'mac');
     return '';
   }
 }
@@ -150,6 +146,9 @@ function macroReplacer(
 function resolveValue(scope: string, field: string, varPath: string, messageId?: number): any {
   const layer = scope as 'message' | 'chat' | 'global';
 
+  // 当 layer='message' 且 messageId=undefined 时（如 system prompt / 首条消息前的宏），
+  // readVariables 内部 buildOption 会使用 'latest' 语义，读取最新消息的变量。
+  // 若聊天尚无消息，则返回空对象 {}，后续 getValueByPath 自然返回 undefined。
   const layerData = layer === 'message'
     ? readVariables('message', messageId)
     : readVariables(layer);

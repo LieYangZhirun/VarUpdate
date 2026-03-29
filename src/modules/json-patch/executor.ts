@@ -7,11 +7,12 @@
  * 生成变更日志（旧值 → 新值）。
  */
 
-import { safeParseWithContext } from '@vendor/schema-to-zod';
+import { safeParseWithContext } from '../schema-compiler/schema-to-zod.js';
 import { getValueByPath, setValueByPath, deleteByPath, parsePath } from '../../shared/path-utils.js';
 import type { PatchInstruction, UpdateResult } from '../../types/index.js';
 import type { CompiledSchema } from '../schema-compiler/index.js';
 import * as notify from '../notification.js';
+import { deepClone } from '../variable-store.js';
 
 // ═══════════════════════════════════════════
 //  公开接口
@@ -44,7 +45,7 @@ export function executeInstructions(
 
   for (const instruction of deduped) {
     // 保存快照（浅拷贝关键路径）
-    const snapshot = JSON.parse(JSON.stringify(result.data));
+    const snapshot = deepClone(result.data);
 
     try {
       const oldValue = getValueByPath(result.data, instruction.path);
@@ -118,7 +119,11 @@ function applyInstruction(instruction: PatchInstruction, data: Record<string, an
       const lastSeg = segments[segments.length - 1];
 
       if (lastSeg === '-') {
-        // 数组末尾追加
+        const parentPath = segments.slice(0, -1).join('/');
+        const parent = getValueByPath(data, parentPath);
+        if (!Array.isArray(parent)) {
+          return false;
+        }
         setValueByPath(data, path, value);
         return true;
       }
@@ -146,9 +151,9 @@ function applyInstruction(instruction: PatchInstruction, data: Record<string, an
 // ═══════════════════════════════════════════
 
 /**
- * 同一路径多条指令 → 仅保留最后一条（D-3）
+ * 同一路径多条指令时仅保留最后一条（面向用户功能卡 · D-3）。
  *
- * 丢弃的同路径指令通过 notice 级通知提醒用户。
+ * 被合并丢弃的同路径指令以 notice 级提示一次。
  */
 function deduplicateByPath(instructions: PatchInstruction[]): PatchInstruction[] {
   const pathMap = new Map<string, { inst: PatchInstruction; count: number }>();
@@ -169,7 +174,7 @@ function deduplicateByPath(instructions: PatchInstruction[]): PatchInstruction[]
 
   if (duplicated.length > 0) {
     // D-3 / 基础设施：notice 级提醒（走通知系统，受用户等级控制）
-    notify.notify('notice', '同路径指令去重', duplicated.join(', '));
+    notify.warning('同路径指令去重', duplicated.join(', '), { category: 'pat' });
   }
 
   return Array.from(pathMap.values()).map(v => v.inst);

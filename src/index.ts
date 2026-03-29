@@ -1,16 +1,14 @@
 /**
  * VarUpdate —— 主控制器
  *
- * 脚本入口点和业务流程编排者。
- *
- * 变量存储结构（接口与契约 4.1-4.3）：
- * - message 层: { data: {...}, log: {...}, isInitPoint: boolean }
- * - chat 层:    { schema?: {...}, default?: {...}, schemaStatus: 'not_loaded'|'compiled'|'error' }
- * - global 层:  { VarUpdate_config: { notifyLevel, autoInitialize, discardThreshold, retentionDepth } }
+ * 脚本入口与业务流程编排。《接口与契约集中定义》第四章约定各层形状摘要如下：
+ * - message：`data`、`log`、可选 `isInitPoint`
+ * - chat：`schema`、`default`、可选 `schemaStatus`（`not_loaded` | `compiled` | `error`）
+ * - global：`VarUpdate_config`（`notifyLevel`、`autoInitialize`、`discardThreshold`、`retentionDepth`）
  */
 
 import { extractVarTags } from './modules/tag-extractor.js';
-import { parseStructuredText, FormatParseError, formatFormatParseDetails } from './modules/format-parser.js';
+import { parseStructuredText, FormatParseError, formatParseErrorDetails } from './modules/format-parser.js';
 import {
   bindSafeParseWithContext,
   compileSchemaFromData,
@@ -18,7 +16,13 @@ import {
   getCachedSchema,
 } from './modules/schema-compiler/index.js';
 import { executeUpdate } from './modules/json-patch/index.js';
-import { readVariables, writeVariables, clearMessageVariablesAfter, pruneOrphanMessageVariables } from './modules/variable-store.js';
+import {
+  readVariables,
+  writeVariables,
+  clearMessageVariablesAfter,
+  pruneOrphanMessageVariables,
+  deepClone,
+} from './modules/variable-store.js';
 import * as eventBus from './modules/event-bus.js';
 import { EVENTS } from './modules/event-bus.js';
 import * as notify from './modules/notification.js';
@@ -27,11 +31,11 @@ import { renderPanel, registerWandButtons, destroyPanel, refreshDebugState, getP
 import { getValueByPath } from './shared/path-utils.js';
 import { mergeDeepWithConflictCheck, MergeConflictError } from './shared/merge-deep-conflict.js';
 import type { ExtractedTag, MessageCompletePayload } from './types/index.js';
-import { z } from 'zod';
+// z（Zod）由酒馆助手注入到 iframe 全局，无需 import
 
 /**
- * 酒馆 message 层实际结构为 { data, log?, isInitPoint? }；registerVariableSchema 按「整层对象」校验。
- * 将用户定义的 Schema 挂在 `data` 上，避免把 data / log / isInitPoint 判为非法顶层键。
+ * 宿主 `registerVariableSchema` 校验的是 message 层整对象；本函数将业务 Schema 包在 `data` 下，
+ * 使 `log`、`isInitPoint` 等约定字段不被误判为非法顶层键。
  */
 function wrapValidatorForMessageLayer(validator: z.ZodTypeAny): z.ZodTypeAny {
   return z
@@ -43,7 +47,7 @@ function wrapValidatorForMessageLayer(validator: z.ZodTypeAny): z.ZodTypeAny {
     .passthrough();
 }
 
-/** 向酒馆变量管理器注册 message 层校验器（整层对象为 { data, log?, isInitPoint? }） */
+/** 尝试向宿主注册 message 层 Zod 校验器（失败时静默）。 */
 function tryRegisterMessageLayerVariableSchema(validator: z.ZodTypeAny): void {
   try {
     if (typeof registerVariableSchema === 'function') {
@@ -55,8 +59,8 @@ function tryRegisterMessageLayerVariableSchema(validator: z.ZodTypeAny): void {
 }
 
 /**
- * 安全读取角色主世界书名。
- * 酒馆助手 `getCurrentCharPrimaryLorebook` 内部会调 `getCharLorebooks()`，无角色卡时抛「未找到当前打开的角色卡」。
+ * 读取当前角色卡绑定的主世界书名称；无角色卡或未绑定时返回 null。
+ * （`getCurrentCharPrimaryLorebook` 内部可能抛出「未找到当前打开的角色卡」，此处吞掉并视为无书。）
  */
 function tryGetCurrentCharPrimaryLorebookName(): string | null {
   try {
@@ -72,8 +76,8 @@ function tryGetCurrentCharPrimaryLorebookName(): string | null {
 }
 
 /**
- * 是否处于「已打开一张有效角色卡」语境（非默认助手临时聊天）。
- * SillyTavern：`getContext().characterId` 即 `this_chid`；仅 Assistant 时常为 undefined（见 script.js / st-context.js）。
+ * 当前是否处于「已打开有效角色卡」语境（排除无绑定角色卡的默认助手会话等）。
+ * 依据 `SillyTavern.getContext().characterId` 与角色条目是否有效判断。
  */
 function isBoundCharacterCardOpen(): boolean {
   try {
@@ -90,7 +94,7 @@ function isBoundCharacterCardOpen(): boolean {
   }
 }
 
-/** 世界书条目正文：若存在围栏代码块则取块内，否则用全文 */
+/** 世界书条目正文：存在 Markdown 围栏代码块时取块内文本，否则使用全文。 */
 function extractLorebookBody(content: string): string {
   const trimmed = (content || '').trim();
   const m = trimmed.match(/```.*\n([\s\S]*?)\n```/m);
@@ -108,7 +112,7 @@ interface LoreTaggedBody {
 
 let unregisterMacros: (() => void) | null = null;
 let isAgentsActive = false;
-/** 接口与契约：MESSAGE_RECEIVED 与 agents:message_complete 互斥的备用时间窗（ms） */
+/** 与 `agents:message_complete` 去重：`MESSAGE_RECEIVED` 在此时间窗内视为已由 Agents 通道处理（毫秒）。 */
 let lastAgentsMessageCompleteAt = 0;
 
 // ═══════════════════════════════════════════
@@ -116,7 +120,7 @@ let lastAgentsMessageCompleteAt = 0;
 // ═══════════════════════════════════════════
 
 async function init(): Promise<void> {
-  notify.debug('初始化', 'VarUpdate 脚本开始加载');
+  notify.debug('初始化', 'VarUpdate 脚本开始加载', { category: 'boot' });
 
   renderPanel({
     onReloadRules: handleReloadRules,
@@ -132,7 +136,7 @@ async function init(): Promise<void> {
   await loadSchema();
 
   await autoInitGreeting();
-  notify.success('初始化完成', 'VarUpdate 已就绪');
+  notify.success('初始化完成', 'VarUpdate 已就绪', { category: 'boot' });
 }
 
 // ═══════════════════════════════════════════
@@ -145,7 +149,7 @@ function bindEvents(): void {
 
   eventBus.on(EVENTS.MESSAGE_COMPLETE, (payload: MessageCompletePayload) => {
     if (!payload || typeof payload.content !== 'string') {
-      notify.debug('Agents', 'message_complete 负载无效，已忽略');
+      notify.debug('Agents', 'message_complete 负载无效，已忽略', { category: 'msg' });
       return;
     }
     lastAgentsMessageCompleteAt = Date.now();
@@ -156,18 +160,18 @@ function bindEvents(): void {
 
   eventBus.on(EVENTS.MESSAGE_RECEIVED, (messageIndex: number, reason?: string) => {
     if (isAgentsActive) return;
-    // 备用：管道标志异常时，避免与 Agents 通道重复处理同一条消息
+    // 双通道去重：管道标志未及时更新时，仍避免与 `message_complete` 重复处理
     if (Date.now() - lastAgentsMessageCompleteAt < 400) return;
     try {
       const context = (globalThis as any).SillyTavern?.getContext?.();
       const message = context?.chat?.[messageIndex];
       if (message?.mes) {
-        // ST 在「保存角色卡 / 导出前保存」等场景会再次派发 first_message，易与手动初始化重复弹窗
+        // SillyTavern 在保存角色卡等场景可能再次派发 first_message，与手动初始化去重
         const quiet = reason === 'first_message';
         void (async () => { await handleMessageContent(message.mes, messageIndex, { quiet }); })();
       }
     } catch (e) {
-      notify.error('消息读取失败', (e as Error).message);
+      notify.error('消息读取失败', (e as Error).message, { category: 'msg' });
     }
   });
 
@@ -186,21 +190,19 @@ function bindEvents(): void {
         void (async () => { await handleMessageContent(message.mes, messageIndex); })();
       }
     } catch (e) {
-      notify.error('消息编辑处理失败', (e as Error).message);
+      notify.error('消息编辑处理失败', (e as Error).message, { category: 'msg' });
     }
   });
 
   eventBus.on(EVENTS.MESSAGE_SWIPED, (messageIndex: number) => {
-    // 滑动常见两类情境（均不宜在此处对 mes 再跑 handleMessageContent）：
-    // 1）滑到新分支 → 酒馆会重发上文/重新生成：变量应在「生成完成」通道里更新，而非滑动瞬间用未稳定正文重算。
-    // 2）滑回已完成分支 → 应与该分支已持久化的变量快照一致；重扫 mes 可能覆盖按 swipe 存储的数据。
-    // 此处仅同步读取当前 message 层（宿主应对应当前 swipe），供调试视图与宏/变量面板一致。
+    // swipe 时不重扫正文：新分支应由生成完成事件更新变量；回退分支应使用已持久化的该 swipe 快照。
+    // 此处仅按宿主当前 swipe 读取 message 层，刷新调试视图与面板展示。
     try {
       const msgVars = readVariables('message', messageIndex);
       refreshDebugState((msgVars.data ?? {}) as Record<string, any>);
-      notify.debug('消息滑动', `已切换到消息 ${messageIndex} 当前分支的变量快照`);
+      notify.debug('消息滑动', `已切换到消息 ${messageIndex} 当前分支的变量快照`, { category: 'msg' });
     } catch (e) {
-      notify.error('消息滑动处理失败', (e as Error).message);
+      notify.error('消息滑动处理失败', (e as Error).message, { category: 'msg' });
     }
   });
 
@@ -211,8 +213,13 @@ function bindEvents(): void {
   });
 
   eventBus.on(EVENTS.RETRY_REQUESTED, (payload: { messageIndex: number }) => {
-    clearMessageVariablesAfter(payload.messageIndex - 1);
-    notify.debug('变量回退', `回退到消息 ${payload.messageIndex} 之前的状态`);
+    const n = payload?.messageIndex;
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) {
+      notify.debug('变量回退', 'retry_requested 负载缺少有效 messageIndex，已忽略', { category: 'life' });
+      return;
+    }
+    clearMessageVariablesAfter(n - 1);
+    notify.debug('变量回退', `自第 ${n} 层起清空 message 变量（含该层）`, { category: 'life' });
   });
 
   if (typeof window !== 'undefined') {
@@ -248,9 +255,9 @@ async function handleMessageContent(
 
   const extraction = extractVarTags(content);
 
-  // P5: 截断标签视为无效，略过不处理（面向用户 G-1）
+  // 截断标签视为无效，略过不处理（面向用户 G-1）
   if (extraction.truncated) {
-    notify.debug('标签截断', `检测到未闭合的 <Var_${extraction.truncatedType === 'update' ? 'Update' : 'Initial'}> 标签，略过`);
+    notify.debug('标签截断', `检测到未闭合的 <Var_${extraction.truncatedType === 'update' ? 'Update' : 'Initial'}> 标签，略过`, { category: 'msg' });
     if (writeIndex !== undefined) {
       inheritVariables(writeIndex);
     }
@@ -261,6 +268,7 @@ async function handleMessageContent(
   const updateTags = extraction.tags.filter(t => t.type === 'update');
 
   // 多条 Var_Initial：与各标签正文先解析为对象，再深度合并；同路径定义不一致 → 报错（与世界书 Schema/Default 相同策略）
+  let initialPipelineOk = initialTags.length === 0;
   if (initialTags.length > 0) {
     try {
       let mergedInitial: Record<string, any> | null = null;
@@ -270,23 +278,26 @@ async function handleMessageContent(
           mergedInitial === null ? obj : mergeDeepWithConflictCheck(mergedInitial, obj);
       }
       if (mergedInitial !== null) {
-        await applyInitialMergedData(mergedInitial, writeIndex, opts);
+        initialPipelineOk = await applyInitialMergedData(mergedInitial, writeIndex, opts);
       }
     } catch (e) {
       if (e instanceof MergeConflictError) {
         notify.error(
           'Var_Initial 合并冲突',
           `${e.message}（路径: ${e.path}）`,
+          { category: 'msg' },
         );
       } else if (e instanceof FormatParseError) {
-        notify.error('Var_Initial 解析失败', formatFormatParseDetails(e));
+        notify.error('Var_Initial 解析失败', formatParseErrorDetails(e), { category: 'msg' });
       } else {
-        notify.error('Var_Initial 处理失败', (e as Error).message);
+        notify.error('Var_Initial 处理失败', (e as Error).message, { category: 'msg' });
       }
+      initialPipelineOk = false;
     }
   }
 
-  if (updateTags.length > 0) {
+  // 同条消息先 Initial 再 Update（面向用户 C-3）；Initial 解析/校验/合并任一步失败则不得在同一基线上跑 Update
+  if (updateTags.length > 0 && initialPipelineOk) {
     await handleUpdate(updateTags, writeIndex);
   }
 
@@ -318,24 +329,26 @@ function getPreviousData(messageIndex: number): Record<string, any> {
   if (messageIndex > 0) {
     const prevVars = readVariables('message', messageIndex - 1);
     if (prevVars.data) {
-      return JSON.parse(JSON.stringify(prevVars.data));
+      return deepClone(prevVars.data);
     }
   }
-  // P1: chat 层默认值键名为 default
+  // chat 层默认值键名为 default（接口与契约 4.2）
   const chatData = readVariables('chat');
-  return chatData.default ? JSON.parse(JSON.stringify(chatData.default)) : {};
+  return chatData.default ? deepClone(chatData.default) : {};
 }
 
 /**
  * 应用已合并的 Initial 对象（面向用户 C-2）
  *
  * 流程：Default 补全 → Schema 校验 → 写入 message 层
+ *
+ * @returns 是否完成可写入的初始化（校验失败或异常时为 false；同条消息内后续 Var_Update 仅在此为 true 时执行）
  */
 async function applyInitialMergedData(
   data: Record<string, any>,
   messageIndex?: number,
   opts?: { quiet?: boolean },
-): Promise<void> {
+): Promise<boolean> {
   try {
     // Default 补全：用 chat 层 default 填充 Initial 中未提供的字段
     const chatData = readVariables('chat');
@@ -360,8 +373,8 @@ async function applyInitialMergedData(
               `${issue.path?.join('/') ?? ''}: ${issue.message}`,
             )
             .join('; ') ?? 'Schema 校验未通过';
-        notify.error('初始化校验失败', detail);
-        return;
+        notify.error('初始化校验失败', detail, { category: 'sch' });
+        return false;
       }
     }
 
@@ -373,15 +386,15 @@ async function applyInitialMergedData(
       writeVariables('message', msgVars, messageIndex);
     }
 
-    // P7: 注册 Schema 到变量管理器
+    // 向酒馆变量管理器注册 message 层校验器（与 Schema 编译结果一致）
     if (schema) {
       tryRegisterMessageLayerVariableSchema(schema.validator as z.ZodTypeAny);
     }
 
     if (opts?.quiet) {
-      notify.debug('变量初始化', `${Object.keys(finalData).length} 个顶层变量已初始化（静默）`);
+      notify.debug('变量初始化', `${Object.keys(finalData).length} 个顶层变量已初始化（静默）`, { category: 'msg' });
     } else {
-      notify.success('变量初始化', `${Object.keys(finalData).length} 个顶层变量已初始化`);
+      notify.success('变量初始化', `${Object.keys(finalData).length} 个顶层变量已初始化`, { category: 'msg' });
     }
 
     await eventBus.emit(EVENTS.INITIALIZED, {
@@ -390,8 +403,10 @@ async function applyInitialMergedData(
     });
 
     refreshDebugState(finalData);
+    return true;
   } catch (e) {
-    notify.error('初始化失败', (e as Error).message);
+    notify.error('初始化失败', (e as Error).message, { category: 'sch' });
+    return false;
   }
 }
 
@@ -399,10 +414,10 @@ async function applyInitialMergedData(
  * 用 Default 值补全 data 中缺失的字段（递归合并，不覆盖已有值）
  */
 function mergeDefaults(data: Record<string, any>, defaults: Record<string, any>): Record<string, any> {
-  const result = JSON.parse(JSON.stringify(data));
+  const result = deepClone(data);
   for (const key of Object.keys(defaults)) {
     if (result[key] === undefined) {
-      result[key] = JSON.parse(JSON.stringify(defaults[key]));
+      result[key] = deepClone(defaults[key]);
     } else if (
       typeof result[key] === 'object' && result[key] !== null && !Array.isArray(result[key]) &&
       typeof defaults[key] === 'object' && defaults[key] !== null && !Array.isArray(defaults[key])
@@ -421,6 +436,7 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
     notify.warning(
       'Var_Update 已跳过',
       '无法确定目标消息楼层（例如当前无聊天记录，或 Agents 未传入 messageIndex）。未执行补丁、未写入 message 层。',
+      { category: 'pat' },
     );
     return;
   }
@@ -429,10 +445,10 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
 
   const msgVarsForRead = readVariables('message', messageIndex);
   const currentData = msgVarsForRead.data
-    ? JSON.parse(JSON.stringify(msgVarsForRead.data))
+    ? deepClone(msgVarsForRead.data)
     : getPreviousData(messageIndex);
 
-  const dataCopy = JSON.parse(JSON.stringify(currentData));
+  const dataCopy = deepClone(currentData);
 
   const schema = getCachedSchema();
   const validationContext = schema ? {
@@ -447,7 +463,7 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
       validationContext
     );
 
-    // P3: 丢弃数超过阈值视为整次更新失败，不得把内存中的 result 写入 message 层（否则与 UPDATE_FAILED 矛盾）
+    // 丢弃数超过容错阈值则整次更新失败，不得写入 message 层（与 varupdate:update_failed 语义一致）
     const { discardThreshold } = getPanelSettings();
     const discardedCount = result.discarded.length;
     const rejectedByThreshold = discardedCount > discardThreshold;
@@ -468,13 +484,14 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
       });
 
       if (discardedCount > 0) {
-        notify.warning('变量更新', `${result.appliedCount} 条成功，${discardedCount} 条丢弃（≤ 阈值 ${discardThreshold}）`);
+        notify.warning('变量更新', `${result.appliedCount} 条成功，${discardedCount} 条丢弃（≤ 阈值 ${discardThreshold}）`, { category: 'pat' });
       }
       refreshDebugState(result.data);
     } else {
       notify.error(
         '变量更新未应用',
         `丢弃 ${discardedCount} 条指令，超过阈值 ${discardThreshold}，本层变量保持原状`,
+        { category: 'pat' },
       );
       await eventBus.emit(EVENTS.UPDATE_FAILED, {
         messageIndex,
@@ -486,7 +503,7 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
     }
 
   } catch (e) {
-    notify.error('更新执行失败', (e as Error).message);
+    notify.error('更新执行失败', (e as Error).message, { category: 'pat' });
     await eventBus.emit(EVENTS.UPDATE_FAILED, {
       messageIndex,
       reason: (e as Error).message,
@@ -500,10 +517,11 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
 // ═══════════════════════════════════════════
 
 /**
- * 清除超出生命周期的旧楼层变量数据（面向用户 十·I-2）
+ * 清除超出生命周期的旧楼层变量数据（面向用户 十·I-2）。
  *
- * P2: 使用 isInitPoint 作为检查点标记名
- * P3: 使用 retentionDepth 作为设置字段名
+ * 跳过带 `isInitPoint` 的检查点楼层；`retentionDepth` 来自面板设置（global 层配置）。
+ *
+ * @param currentIndex 当前正在处理的消息下标（以此为基准计算保留窗口）
  */
 function cleanupOldVariables(currentIndex: number): void {
   try {
@@ -514,7 +532,7 @@ function cleanupOldVariables(currentIndex: number): void {
     for (let i = 0; i < cutoff; i++) {
       const msgVars = readVariables('message', i);
       if (msgVars.isInitPoint) continue;
-      if (msgVars.data || msgVars.log) {
+      if (msgVars.data !== undefined || msgVars.log !== undefined) {
         delete msgVars.data;
         delete msgVars.log;
         writeVariables('message', msgVars, i);
@@ -568,7 +586,7 @@ async function autoRecoverIfNeeded(): Promise<void> {
     }
 
     const startIndex = recoverFrom >= 0 ? recoverFrom + 1 : 0;
-    notify.debug('自动恢复', `从第 ${startIndex} 层开始恢复变量链`);
+    notify.debug('自动恢复', `从第 ${startIndex} 层开始恢复变量链`, { category: 'life' });
 
     // 严格按序恢复——消息 N 的变量依赖 N-1 的结果
     for (let i = startIndex; i <= lastIndex; i++) {
@@ -589,7 +607,7 @@ async function autoRecoverIfNeeded(): Promise<void> {
 /**
  * 从世界书扫描 [Var_Schema] 和 [Var_Default] 条目
  *
- * P1: chat 层键名 schema / default / schemaStatus
+ * chat 层键名：schema / default / schemaStatus（接口与契约 4.2）。
  *
  * @param opts.expectLorebook 为 true 时（如用户点击「重新加载格式规则」）：无角色卡/无主世界书视为失败并 warning；否则仅 debug 跳过（初始化/切聊天等）。
  * @returns 是否未出现阻塞性错误（解析/合并/编译失败则为 false）
@@ -598,8 +616,8 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
   const chatData = readVariables('chat');
   let ok = true;
 
-  const announceSchemaOk = (msg: string) => notify.debug('Schema', msg);
-  const announceDefaultOk = (msg: string) => notify.debug('Default', msg);
+  const announceSchemaOk = (msg: string) => notify.debug('Schema', msg, { category: 'sch' });
+  const announceDefaultOk = (msg: string) => notify.debug('Default', msg, { category: 'wb' });
 
   try {
     const lorebookName = tryGetCurrentCharPrimaryLorebookName();
@@ -608,11 +626,13 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
         notify.warning(
           '格式规则',
           '未打开角色卡或未绑定主世界书，无法从世界书加载 [Var_Schema] / [Var_Default]。',
+          { category: 'wb' },
         );
       } else {
         notify.debug(
           '世界书',
           '当前无角色卡或未绑定主世界书，跳过从世界书加载格式规则',
+          { category: 'wb' },
         );
       }
       writeVariables('chat', chatData);
@@ -621,7 +641,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
 
     const entries = await (globalThis as any).getLorebookEntries(lorebookName);
     if (!entries || !Array.isArray(entries)) {
-      notify.debug('世界书', `无法读取世界书: ${lorebookName}`);
+      notify.debug('世界书', `无法读取世界书: ${lorebookName}`, { category: 'wb' });
       writeVariables('chat', chatData);
       return true;
     }
@@ -655,7 +675,8 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
             delete chatData.schema;
             notify.error(
               'Schema 条目无法解析',
-              `世界书「${lorebookName}」\n备注含 [Var_Schema] 的条目：${comment.slice(0, 80)}${comment.length > 80 ? '…' : ''}\n\n${formatFormatParseDetails(e)}`,
+              `世界书「${lorebookName}」\n备注含 [Var_Schema] 的条目：${comment.slice(0, 80)}${comment.length > 80 ? '…' : ''}\n\n${formatParseErrorDetails(e)}`,
+              { category: 'wb' },
             );
             mergedSchema = null;
             break;
@@ -668,13 +689,13 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
         ok = false;
         chatData.schemaStatus = 'error';
         delete chatData.schema;
-        notify.error('Schema 合并冲突', `${(e as MergeConflictError).message}（路径: ${(e as MergeConflictError).path}）`);
+        notify.error('Schema 合并冲突', `${(e as MergeConflictError).message}（路径: ${(e as MergeConflictError).path}）`, { category: 'wb' });
         mergedSchema = null;
       } else {
         ok = false;
         chatData.schemaStatus = 'error';
         delete chatData.schema;
-        notify.error('世界书 / Schema', (e as Error).message);
+        notify.error('世界书 / Schema', (e as Error).message, { category: 'wb' });
         mergedSchema = null;
       }
     }
@@ -694,7 +715,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
         ok = false;
         chatData.schemaStatus = 'error';
         delete chatData.schema;
-        notify.error('Schema 编译失败', (e as Error).message);
+        notify.error('Schema 编译失败', (e as Error).message, { category: 'wb' });
       }
     } else if (schemaTagged.some(t => t.body.trim()) && chatData.schemaStatus !== 'error') {
       // 有条目但正文全空等：不覆盖 compiled，仅保持现状
@@ -713,7 +734,8 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
             ok = false;
             notify.error(
               'Default 条目无法解析',
-              `世界书「${lorebookName}」\n备注含 [Var_Default] 的条目：${comment.slice(0, 80)}${comment.length > 80 ? '…' : ''}\n\n${formatFormatParseDetails(e)}`,
+              `世界书「${lorebookName}」\n备注含 [Var_Default] 的条目：${comment.slice(0, 80)}${comment.length > 80 ? '…' : ''}\n\n${formatParseErrorDetails(e)}`,
+              { category: 'wb' },
             );
             mergedDefault = null;
             break;
@@ -724,11 +746,11 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
     } catch (e) {
       if (e instanceof MergeConflictError) {
         ok = false;
-        notify.error('Default 合并冲突', `${(e as MergeConflictError).message}（路径: ${(e as MergeConflictError).path}）`);
+        notify.error('Default 合并冲突', `${(e as MergeConflictError).message}（路径: ${(e as MergeConflictError).path}）`, { category: 'wb' });
         mergedDefault = null;
       } else {
         ok = false;
-        notify.error('世界书 / Default', (e as Error).message);
+        notify.error('世界书 / Default', (e as Error).message, { category: 'wb' });
         mergedDefault = null;
       }
     }
@@ -745,7 +767,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
   } catch (e) {
     ok = false;
     chatData.schemaStatus = 'error';
-    notify.error('世界书加载失败', (e as Error).message);
+    notify.error('世界书加载失败', (e as Error).message, { category: 'wb' });
     writeVariables('chat', chatData);
     return false;
   }
@@ -763,7 +785,7 @@ async function loadSchema(): Promise<void> {
     // 含 schemaStatus===compiled 但缺 schema 等异常态，统一走世界书重载
     await loadSchemaAndDefaultFromWorldBook();
   } catch (e) {
-    notify.error('Schema 加载失败', (e as Error).message);
+    notify.error('Schema 加载失败', (e as Error).message, { category: 'sch' });
   }
 }
 
@@ -771,8 +793,9 @@ async function loadSchema(): Promise<void> {
 //  手动操作回调
 // ═══════════════════════════════════════════
 
+/** 面板「重新加载格式规则」：清空编译缓存并从世界书重载 Schema / Default。 */
 async function handleReloadRules(): Promise<void> {
-  notify.debug('手动操作', '重新加载格式规则');
+  notify.debug('手动操作', '重新加载格式规则', { category: 'man' });
   clearCache();
   const chatData = readVariables('chat');
   delete chatData.schema;
@@ -791,8 +814,9 @@ async function handleReloadRules(): Promise<void> {
   }
 }
 
+/** 面板「从开场白重新初始化」：仅重跑第 0 层消息上的 Var 标签逻辑。 */
 async function handleReinitFromGreeting(): Promise<void> {
-  notify.debug('手动操作', '从开场白重新初始化');
+  notify.debug('手动操作', '从开场白重新初始化', { category: 'man' });
   if (!isBoundCharacterCardOpen()) {
     notify.feedback(false, '开场白初始化', '请先打开一张角色卡后再使用（默认助手聊天无绑定世界书，变量规则不适用）。');
     return;
@@ -807,13 +831,14 @@ async function handleReinitFromGreeting(): Promise<void> {
       notify.feedback(false, '开场白初始化', '未找到开场白消息');
     }
   } catch (e) {
-    notify.error('初始化失败', (e as Error).message);
+    notify.error('初始化失败', (e as Error).message, { category: 'man' });
     notify.feedback(false, '开场白初始化', (e as Error).message);
   }
 }
 
+/** 面板「重新解析当前楼层」：清空最后一层 message 的 data/log 后按正文重算。 */
 async function handleReparseFloor(): Promise<void> {
-  notify.debug('手动操作', '重新解析当前楼层');
+  notify.debug('手动操作', '重新解析当前楼层', { category: 'man' });
   if (!isBoundCharacterCardOpen()) {
     notify.feedback(false, '重解析', '请先打开一张角色卡后再使用。');
     return;
@@ -837,13 +862,14 @@ async function handleReparseFloor(): Promise<void> {
       notify.feedback(false, '重解析', '当前楼层没有可解析的消息正文');
     }
   } catch (e) {
-    notify.error('重解析失败', (e as Error).message);
+    notify.error('重解析失败', (e as Error).message, { category: 'man' });
     notify.feedback(false, '重解析', (e as Error).message);
   }
 }
 
+/** 魔棒「设置变量检查点」：将当前最后一层标记为 `isInitPoint`，供链式重解析起点。 */
 function handleSetCheckpoint(): void {
-  notify.debug('手动操作', '设置变量检查点');
+  notify.debug('手动操作', '设置变量检查点', { category: 'man' });
   if (!isBoundCharacterCardOpen()) {
     notify.feedback(false, '检查点', '请先打开一张角色卡后再使用。');
     return;
@@ -856,18 +882,19 @@ function handleSetCheckpoint(): void {
     }
     const lastIndex = context.chat.length - 1;
     const msgVars = readVariables('message', lastIndex);
-    // P2: 使用 isInitPoint 作为检查点标记
+    // 面向用户：检查点由 message 层 isInitPoint 标记
     msgVars.isInitPoint = true;
     writeVariables('message', msgVars, lastIndex);
     notify.feedback(true, '检查点', `已将第 ${lastIndex} 层设为检查点`);
   } catch (e) {
-    notify.error('检查点设置失败', (e as Error).message);
+    notify.error('检查点设置失败', (e as Error).message, { category: 'man' });
     notify.feedback(false, '检查点', (e as Error).message);
   }
 }
 
+/** 魔棒「从检查点逐层重新解析」：从最近检查点下一层起顺序重跑各层正文。 */
 async function handleReparseFromCheckpoint(): Promise<void> {
-  notify.debug('手动操作', '从检查点逐层重新解析');
+  notify.debug('手动操作', '从检查点逐层重新解析', { category: 'man' });
   if (!isBoundCharacterCardOpen()) {
     notify.feedback(false, '链式重解析', '请先打开一张角色卡后再使用。');
     return;
@@ -889,7 +916,7 @@ async function handleReparseFromCheckpoint(): Promise<void> {
     }
 
     const startIndex = checkpointIndex >= 0 ? checkpointIndex + 1 : 0;
-    notify.debug('链式重解析', `从第 ${startIndex} 层开始`);
+    notify.debug('链式重解析', `从第 ${startIndex} 层开始`, { category: 'man' });
 
     for (let i = startIndex; i < context.chat.length; i++) {
       const msg = context.chat[i];
@@ -900,7 +927,7 @@ async function handleReparseFromCheckpoint(): Promise<void> {
 
     notify.feedback(true, '链式重解析', `已重新解析第 ${startIndex} ~ ${context.chat.length - 1} 层`);
   } catch (e) {
-    notify.error('链式重解析失败', (e as Error).message);
+    notify.error('链式重解析失败', (e as Error).message, { category: 'man' });
     notify.feedback(false, '链式重解析', (e as Error).message);
   }
 }
@@ -916,13 +943,13 @@ function cleanup(): void {
   destroyPanel();
   unregisterMacros?.();
   eventBus.removeAll();
-  notify.debug('卸载', 'VarUpdate 脚本已卸载');
+  notify.debug('卸载', 'VarUpdate 脚本已卸载', { category: 'boot' });
 }
 
 // ═══════════════════════════════════════════
 //  启动
 // ═══════════════════════════════════════════
 
-init().catch(e => {
-  console.error('[VarUpdate] 初始化失败:', e);
+init().catch((e) => {
+  notify.bootstrapError(e);
 });
