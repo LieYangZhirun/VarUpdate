@@ -179,7 +179,7 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">4. 变量条件标签 (动态开关)</h3>
     <p>把中括号 <code>[]</code> 放在预设名称、世界书备注、正则等名字的两边，<b>只有里面的条件成真时，这条设定才会被设为启用发送</b>。</p>
 
-    <p style="margin: 5px 0 2px 0; font-size: 0.9em;"><b>4.1 值运算</b> <span style="color:var(--SmartThemeHintColor, #888);">（支持附录中的通配符规则）</span></p>
+    <p style="margin: 5px 0 2px 0; font-size: 0.9em;"><b>4.1 值运算</b> <span style="color:var(--SmartThemeHintColor, #888);">（数值、存在性检查、以及通配符比对与群体扫描）</span></p>
     <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); background: var(--blackA70, rgba(0,0,0,0.1));">
         <th style="padding: 4px; width: 15%;">运算符</th>
@@ -187,7 +187,7 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
         <th style="padding: 4px; width: 40%;">配置示例</th>
       </tr>
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>==</code> / <code>!=</code></td><td style="padding: 4px;">宽松相等 / 不等</td><td style="padding: 4px;"><code>["当前地点" == "学校天台"]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>===</code> / <code>!==</code></td><td style="padding: 4px;">严格相等 / 严格不等 (要求数据类型一致)</td><td style="padding: 4px;"><code>["***/玩家好感度" === 50]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>===</code> / <code>!==</code></td><td style="padding: 4px;">严格相等 / 严格不等 (要求数据类型一致)</td><td style="padding: 4px;"><code>["林夏/玩家好感度" === 50]</code></td></tr>
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>&gt;</code> / <code>&gt;=</code> / <code>&lt;</code> / <code>&lt;=</code></td><td style="padding: 4px;">数值比较</td><td style="padding: 4px;"><code>["玩家/金钱" &lt; 300]</code></td></tr>
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>∋</code> / <code>∌</code></td><td style="padding: 4px;">数组含 / 不含某个值</td><td style="padding: 4px;"><code>["玩家/物品栏" ∋ "草莓牛奶"]</code></td></tr>
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>⊇</code> / <code>!⊇</code></td><td style="padding: 4px;">对象含 / 不含某个键</td><td style="padding: 4px;"><code>["玩家/状态" ⊇ "心跳加速"]</code></td></tr>
@@ -203,32 +203,36 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
         <th style="padding: 4px; width: 45%;">规则描述</th>
         <th style="padding: 4px; width: 40%;">配置示例</th>
       </tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">AND (与)</td><td style="padding: 4px;">多个方括号并排连写。全部满足才生效。</td><td style="padding: 4px;"><code>["角色列表/***/玩家好感度" &gt; 50]["当前地点" == "天台"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">AND (与)</td><td style="padding: 4px;">多个方括号并排连写。全部满足才生效。</td><td style="padding: 4px;"><code>["角色列表/陈秋/玩家好感度" &gt; 50]["当前地点" == "天台"]</code></td></tr>
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">OR (或)</td><td style="padding: 4px;">在同一个方括号内用 <code>|</code> 隔开，满足其一即可。</td><td style="padding: 4px;"><code>["当前天气" == "下雨" | "当前时间/星期" == "周日"]</code></td></tr>
-      <tr><td style="padding: 4px;">NOT (非)</td><td style="padding: 4px;">首位加 <code>!</code> 直接反转该条件。</td><td style="padding: 4px;"><code>[!"角色列表/***/当前情绪" == "愤怒"]</code></td></tr>
+      <tr><td style="padding: 4px;">NOT (非)</td><td style="padding: 4px;">首位加 <code>!</code> 直接反转该条件。</td><td style="padding: 4px;"><code>[!"陈秋/当前情绪" == "愤怒"]</code></td></tr>
     </table>
 
     <p style="margin: 15px 0 2px 0; font-size: 0.9em;"><b>4.3 组合具体示例</b></p>
     <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); background: var(--blackA70, rgba(0,0,0,0.1));">
-        <th style="padding: 4px; width: 55%;">条目标签与世界书标题</th>
+        <th style="padding: 4px; width: 55%;">条目标题</th>
         <th style="padding: 4px; width: 45%;">规则解读</th>
       </tr>
       <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
-        <td style="padding: 4px;"><code>["当前地点" == "天台"]["好感度" &gt; 20]</code> 触发特殊午餐事件</td>
+        <td style="padding: 4px;"><code>["当前地点" == "天台"]["好感度" &gt; 20]特殊午餐事件</code></td>
         <td style="padding: 4px;">不仅要在学校“天台”，且对象好感度大于20时才会触发。</td>
       </tr>
       <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
-        <td style="padding: 4px;"><code>["玩家/物品栏" ∋ "情书" | "星期" == "周五"]</code> 告白冲动设定</td>
+        <td style="padding: 4px;"><code>["玩家/物品栏" ∋ "情书"|"星期" == "周五"]告白冲动</code></td>
         <td style="padding: 4px;">只要玩家带着“情书”，或者是恰好碰上容易冲动的“周五”，都会激活该状态设定。</td>
       </tr>
       <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
-        <td style="padding: 4px;"><code>[!"玩家/状态标记" ⊇ "生病"]["金钱" &gt; 100]</code> 解锁周末约会</td>
+        <td style="padding: 4px;"><code>[!"玩家/状态标记" ⊇ "生病"]["金钱" &gt; 100]解锁周末约会</code></td>
         <td style="padding: 4px;">需要玩家没有“生病”，并且“金钱”足够花销，才会解锁周末约会。</td>
       </tr>
-      <tr>
-        <td style="padding: 4px;"><code>["陈秋/玩家好感度" &lt;= $"林夏/玩家好感度"]</code> 陈秋的心态:祝愿</td>
+      <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>["陈秋/玩家好感度" &lt;= $"林夏/玩家好感度"]陈秋的心态:默默祝愿</code></td>
         <td style="padding: 4px;">实时比较两个变量值，根据人际动态决定角色行为模式。</td>
+      </tr>
+      <tr>
+        <td style="padding: 4px;"><code>["队伍/*/状态" ⊇ "中毒"]全员解毒祈祷</code></td>
+        <td style="padding: 4px;">只要带有<code>*</code>，引擎就会把该路径符合的节点全部列为集合（群体扫描）。只要队伍中<b>有任何一个人</b>中毒，就会立刻触发该事件！</td>
       </tr>
     </table>
 
@@ -236,10 +240,9 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     <div style="margin-top: 25px; padding: 10px; border-radius: 6px; background: var(--blackA70, rgba(0,0,0,0.1)); border: 1px dashed var(--SmartThemeBorderColor, #ccc);">
       <h4 style="margin: 0 0 6px 0; font-size: 0.95em;">附录：通配符 <code>*</code></h4>
       <p style="margin: 0; font-size: 0.85em; color: var(--SmartThemeHintColor, #888);">
-      可用于条件标签内的所有包含/配对运算中，也可以用于 Schema 里的 <code>$enum</code> 等文本比对约束里。<br>
-      • **数字匹配**：<code>1~2</code>个星号代表严格的一字一配。<code>3</code>个及其以上的星号(如 <code>***</code>)可以忽略前导或后随长度，匹配任意长的内容。
-      • **位置匹配**：<code>*</code>号可以出现在字符串的开头、结尾或中间，表示该位置可以匹配任意字符序列。
-      • **示例**：<code>["地点" == "***森林***"]</code> 可以匹配“原始森林外围”、“森林中央”等。
+      <b>1. 替代具体的值（右侧位置）</b>：用于所有的包含/配对运算中以模糊匹配字眼。比如 <code>["地点" == "***森林***"]</code>。<br>
+      <b>2. 进行群体扫描（左侧路径）</b>：你可以把星号放在变量的路径里面（比如 <code>队伍/*/好感度 &gt; 50</code>），引擎会抓回所有分支进行判断。只要其中<b>任意一个成员</b>符合要求，整个条件立刻通过（搜查/求救神技）！<br>
+      • <b>字符规则</b>：<code>1~2</code>个星号代表严格的一字一配。<code>3</code>个极其以上的星号(如 <code>***</code>)可以忽略前缀或后缀的长度匹配任意内容。
       </p>
     </div>
   </div>

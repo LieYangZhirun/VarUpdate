@@ -8,6 +8,8 @@
  */
 
 import { getFuzzyValueByPath } from '../shared/path-utils.js';
+import { hasWildcard, wildcardMatch } from '../shared/wildcard.js';
+import { getValuesByWildcardPath } from '../shared/path-utils.js';
 
 // ═══════════════════════════════════════════
 //  公开接口
@@ -101,24 +103,26 @@ function evaluateBody(body: string, data: Record<string, any>): boolean {
 
   // ── 存在性检查 ？ / !? ──
   if (rest === '?') {
-    const val = getFuzzyValueByPath(data, varPath);
+    const leftRes = getValuesByWildcardPath(data, varPath);
+    if (leftRes.isWildcard) {
+      return leftRes.values.length > 0;
+    }
+    const val = leftRes.values[0];
     return val !== undefined && val !== null;
   }
   if (rest === '!?') {
-    const val = getFuzzyValueByPath(data, varPath);
+    const leftRes = getValuesByWildcardPath(data, varPath);
+    if (leftRes.isWildcard) {
+      return leftRes.values.length === 0;
+    }
+    const val = leftRes.values[0];
     return val === undefined || val === null;
   }
 
-  // ── 长度运算符 # ──
-  if (rest.startsWith('#')) {
-    rest = rest.slice(1).trim();
-    const val = getFuzzyValueByPath(data, varPath);
-    const len = getCollectionLength(val);
-    if (len === null) return false;
-    return evaluateLengthComparison(len, rest);
-  }
+  // ── 取左值 ──
+  const leftRes = getValuesByWildcardPath(data, varPath);
 
-  // ── 普通运算符 ──
+  // ── 集合逻辑判断 ──
   const opParse = parseOperator(rest);
   if (!opParse) {
     warn(`无法解析运算符: ${body}`);
@@ -126,20 +130,46 @@ function evaluateBody(body: string, data: Record<string, any>): boolean {
   }
 
   const operator = opParse.op;
-  rest = rest.slice(opParse.end).trim();
+  const conditionRest = rest.slice(opParse.end).trim();
 
   // ── 右操作数 ──
-  const rightValue = parseRightOperand(rest, data);
+  const rightValue = parseRightOperand(conditionRest, data);
   if (rightValue === PARSE_FAILED) {
     warn(`无法解析右操作数: ${body}`);
     return false;
   }
 
-  // ── 取左值 ──
-  const leftValue = getFuzzyValueByPath(data, varPath);
+  if (leftRes.isWildcard) {
+    if (leftRes.values.length === 0) {
+      // 没有任何合法的左侧匹配项时，长度#必定是判错
+      if (rest.startsWith('#')) return false;
+      return false;
+    }
 
-  // ── 执行比较 ──
-  return compare(leftValue, operator, rightValue);
+    // ── 长度运算符 # (针对隐式集合每个元素) ──
+    if (rest.startsWith('#')) {
+      return leftRes.values.some((v: any) => {
+        const len = getCollectionLength(v);
+        if (len === null) return false;
+        return evaluateLengthComparison(len, conditionRest);
+      });
+    }
+
+    // ── 普通比较 (隐式集合 SOME 逻辑) ──
+    return leftRes.values.some((v: any) => compare(v, operator, rightValue));
+
+  } else {
+    const leftValue = leftRes.values[0];
+
+    // ── 长度运算符 # ──
+    if (rest.startsWith('#')) {
+      const len = getCollectionLength(leftValue);
+      if (len === null) return false;
+      return evaluateLengthComparison(len, conditionRest);
+    }
+    
+    return compare(leftValue, operator, rightValue);
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -353,59 +383,6 @@ function getCollectionLength(val: any): number | null {
   if (Array.isArray(val)) return val.length;
   if (val !== null && typeof val === 'object') return Object.keys(val).length;
   return null;
-}
-
-// ═══════════════════════════════════════════
-//  内部：通配符匹配
-// ═══════════════════════════════════════════
-
-/** 检查字符串是否包含通配符 */
-function hasWildcard(s: string): boolean {
-  return s.includes('*');
-}
-
-/**
- * 通配符模式匹配
- *
- * 规则（与 Schema $enum 通配符一致）：
- * - 1~2 个 *：每个 * 匹配恰好 1 个字符
- * - 3 个及以上 *：连续 * 组匹配任意数量字符（0 到无穷）
- * - 大小写不敏感
- */
-function wildcardMatch(pattern: string, text: string): boolean {
-  const p = pattern.toLowerCase();
-  const t = text.toLowerCase();
-  const chars = Array.from(p);
-  const starCount = chars.filter(c => c === '*').length;
-
-  if (starCount === 0) return p === t;
-
-  const regexStr = buildWildcardRegex(chars, starCount);
-  try {
-    return new RegExp('^' + regexStr + '$', 'su').test(t);
-  } catch {
-    return false;
-  }
-}
-
-function buildWildcardRegex(chars: string[], starCount: number): string {
-  const parts: string[] = [];
-  let i = 0;
-  while (i < chars.length) {
-    if (chars[i] === '*') {
-      if (starCount <= 2) {
-        parts.push('.');
-        i++;
-      } else {
-        while (i < chars.length && chars[i] === '*') i++;
-        parts.push('.*');
-      }
-    } else {
-      parts.push(chars[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-      i++;
-    }
-  }
-  return parts.join('');
 }
 
 // ═══════════════════════════════════════════
