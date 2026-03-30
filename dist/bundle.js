@@ -200,7 +200,7 @@ ${u}`,t);jr(this,"line");jr(this,"column");jr(this,"codeblock");this.line=i,this
 
   <!-- \u53F3\u5217\uFF1A\u5B8F\u4E0E\u6761\u4EF6 -->
   <div style="flex: 1;">
-    <h3 style="margin-top: 0; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">3. \u63D2\u503C\u5360\u4F4D\u7B26 (\u7ED9 AI \u63D0\u53D6\u6570\u636E)</h3>
+    <h3 style="margin-top: 0; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">3. \u63D2\u503C\u5360\u4F4D\u7B26</h3>
     <p><b>3.1 \u63D0\u53D6\u5F53\u524D\u53D8\u91CF</b><br>
     \u4F60\u53EF\u4EE5\u5728\u9884\u8BBE\u3001\u89D2\u8272\u5361\u3001\u4E16\u754C\u4E66\u7684\u4EFB\u610F\u4F4D\u7F6E\u63D2\u5165<code>{{message/data/\u5177\u4F53\u8DEF\u5F84}}</code>\u8FD9\u6837\u7684\u5360\u4F4D\u7B26\uFF0C\u811A\u672C\u4F1A\u81EA\u52A8\u6839\u636E\u53D8\u91CF\u8DEF\u5F84\u63D0\u53D6\u53F6\u5B50\u8282\u70B9\u7684\u5177\u4F53\u503C\uFF0C\u6216\u8303\u56F4\u63D0\u53D6\u7236\u8282\u70B9\u7684\u7ED3\u6784\u3001\u8F6C\u5316\u4E3A\u201CPromptalYAML\u201D\u2014\u2014\u4E00\u79CD\u975E\u5E38\u8282\u7EA6Token\u7684\u63D0\u793A\u8BCD\u4E13\u7528\u683C\u5F0F\u3002</p>
 
@@ -210,60 +210,55 @@ ${u}`,t);jr(this,"line");jr(this,"column");jr(this,"codeblock");this.line=i,this
     <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">4. \u53D8\u91CF\u6761\u4EF6\u6807\u7B7E (\u52A8\u6001\u5F00\u5173)</h3>
     <p>\u628A\u4E2D\u62EC\u53F7 <code>[]</code> \u653E\u5728\u9884\u8BBE\u540D\u79F0\u3001\u4E16\u754C\u4E66\u5907\u6CE8\u3001\u6B63\u5219\u7B49\u540D\u5B57\u7684\u4E24\u8FB9\uFF0C<b>\u53EA\u6709\u91CC\u9762\u7684\u6761\u4EF6\u6210\u771F\u65F6\uFF0C\u8FD9\u6761\u8BBE\u5B9A\u624D\u4F1A\u88AB\u8BBE\u4E3A\u542F\u7528\u53D1\u9001</b>\u3002</p>
 
-    <p style="margin: 5px 0 2px 0; font-size: 0.9em;"><b>\u2460 \u503C\u8FD0\u7B97</b> <span style="color:var(--SmartThemeHintColor, #888);">\uFF08\u652F\u6301\u9644\u5F55\u4E2D\u7684\u901A\u914D\u7B26\u89C4\u5219\uFF09</span></p>
+    <p style="margin: 5px 0 2px 0; font-size: 0.9em;"><b>4.1 \u503C\u8FD0\u7B97</b> <span style="color:var(--SmartThemeHintColor, #888);">\uFF08\u652F\u6301\u9644\u5F55\u4E2D\u7684\u901A\u914D\u7B26\u89C4\u5219\uFF09</span></p>
     <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); background: var(--blackA70, rgba(0,0,0,0.1));">
         <th style="padding: 4px; width: 15%;">\u8FD0\u7B97\u7B26</th>
         <th style="padding: 4px; width: 45%;">\u89C4\u5219\u63CF\u8FF0</th>
         <th style="padding: 4px; width: 40%;">\u914D\u7F6E\u793A\u4F8B</th>
       </tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>==</code> / <code>!=</code></td><td style="padding: 4px;">\u5BBD\u677E\u76F8\u7B49 / \u4E0D\u7B49</td><td style="padding: 4px;"><code>["\u5730\u70B9" == "\u5B66\u6821\u5929\u53F0"]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>===</code> / <code>!==</code></td><td style="padding: 4px;">\u4E25\u683C\u76F8\u7B49 / \u4E25\u683C\u4E0D\u7B49 (\u8981\u6C42\u6570\u636E\u7C7B\u578B\u4E00\u81F4)</td><td style="padding: 4px;"><code>["\u597D\u611F\u5EA6" === 50]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>&gt;</code> / <code>&lt;=</code> \u7B49</td><td style="padding: 4px;">\u6570\u503C\u6BD4\u8F83</td><td style="padding: 4px;"><code>["\u91D1\u94B1" &lt; 300]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>\u220B</code> / <code>\u220C</code></td><td style="padding: 4px;">\u6570\u7EC4\u542B / \u4E0D\u542B\u67D0\u4E2A\u503C</td><td style="padding: 4px;"><code>["\u80CC\u5305" \u220B "\u8349\u8393\u725B\u5976"]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>\u2287</code> / <code>!\u2287</code></td><td style="padding: 4px;">\u5BF9\u8C61\u542B / \u4E0D\u542B\u67D0\u4E2A\u952E</td><td style="padding: 4px;"><code>["\u72B6\u6001" \u2287 "\u5FC3\u8DF3\u52A0\u901F"]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>#</code></td><td style="padding: 4px;">\u8BA1\u7B97\u957F\u5EA6\u540E\u518D\u8FDB\u884C\u6BD4\u8F83</td><td style="padding: 4px;"><code>["\u7269\u54C1\u680F" # &lt; 5]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>==</code> / <code>!=</code></td><td style="padding: 4px;">\u5BBD\u677E\u76F8\u7B49 / \u4E0D\u7B49</td><td style="padding: 4px;"><code>["\u5F53\u524D\u5730\u70B9" == "\u5B66\u6821\u5929\u53F0"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>===</code> / <code>!==</code></td><td style="padding: 4px;">\u4E25\u683C\u76F8\u7B49 / \u4E25\u683C\u4E0D\u7B49 (\u8981\u6C42\u6570\u636E\u7C7B\u578B\u4E00\u81F4)</td><td style="padding: 4px;"><code>["***/\u73A9\u5BB6\u597D\u611F\u5EA6" === 50]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>&gt;</code> / <code>&gt;=</code> / <code>&lt;</code> / <code>&lt;=</code></td><td style="padding: 4px;">\u6570\u503C\u6BD4\u8F83</td><td style="padding: 4px;"><code>["\u73A9\u5BB6/\u91D1\u94B1" &lt; 300]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>\u220B</code> / <code>\u220C</code></td><td style="padding: 4px;">\u6570\u7EC4\u542B / \u4E0D\u542B\u67D0\u4E2A\u503C</td><td style="padding: 4px;"><code>["\u73A9\u5BB6/\u7269\u54C1\u680F" \u220B "\u8349\u8393\u725B\u5976"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>\u2287</code> / <code>!\u2287</code></td><td style="padding: 4px;">\u5BF9\u8C61\u542B / \u4E0D\u542B\u67D0\u4E2A\u952E</td><td style="padding: 4px;"><code>["\u73A9\u5BB6/\u72B6\u6001" \u2287 "\u5FC3\u8DF3\u52A0\u901F"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>#</code></td><td style="padding: 4px;">\u8BA1\u7B97\u957F\u5EA6\u540E\u518D\u8FDB\u884C\u6BD4\u8F83</td><td style="padding: 4px;"><code>["\u73A9\u5BB6/\u7269\u54C1\u680F" # &lt; 5]</code></td></tr>
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>?</code> / <code>!?</code></td><td style="padding: 4px;">\u68C0\u67E5\u53D8\u91CF\u662F\u5426\u5DF2\u88AB\u521B\u5EFA(\u5DF2\u8D4B\u8FC7\u503C)</td><td style="padding: 4px;"><code>["\u60C5\u4E66" ?]</code></td></tr>
-      <tr><td style="padding: 4px;"><code>$</code> (\u6BD4\u5BF9\u524D)</td><td style="padding: 4px;">\u7528\u6765\u4E0E\u53E6\u4E00\u4E2A\u52A8\u6001\u53D8\u91CF\u7684\u5F53\u524D\u503C\u505A\u6BD4\u8F83</td><td style="padding: 4px;"><code>["\u672C\u6B21\u5F00\u9500" &gt; $"\u73A9\u5BB6/\u91D1\u94B1"]</code></td></tr>
+      <tr><td style="padding: 4px;"><code>$</code> (\u52A0\u5728\u952E\u540D\u524D)</td><td style="padding: 4px;">\u7528\u6765\u4E0E\u53E6\u4E00\u4E2A\u52A8\u6001\u53D8\u91CF\u7684\u5F53\u524D\u503C\u505A\u6BD4\u8F83</td><td style="padding: 4px;"><code>["xxx\u4EF7\u683C" &gt; $"\u73A9\u5BB6/\u91D1\u94B1"]</code></td></tr>
     </table>
 
-    <p style="margin: 15px 0 2px 0; font-size: 0.9em;"><b>\u2461 \u903B\u8F91\u8FD0\u7B97</b></p>
+    <p style="margin: 15px 0 2px 0; font-size: 0.9em;"><b>4.2 \u903B\u8F91\u8FD0\u7B97</b></p>
     <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); background: var(--blackA70, rgba(0,0,0,0.1));">
         <th style="padding: 4px; width: 15%;">\u8FD0\u7B97\u7B26</th>
         <th style="padding: 4px; width: 45%;">\u89C4\u5219\u63CF\u8FF0</th>
         <th style="padding: 4px; width: 40%;">\u914D\u7F6E\u793A\u4F8B</th>
       </tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">AND (\u4E0E)</td><td style="padding: 4px;">\u591A\u4E2A\u65B9\u62EC\u53F7\u5E76\u6392\u8FDE\u5199\u3002\u5168\u90E8\u6EE1\u8DB3\u624D\u751F\u6548\u3002</td><td style="padding: 4px;"><code>["\u597D\u611F" &gt; 50]["\u5730\u70B9" == "\u5929\u53F0"]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">OR (\u6216)</td><td style="padding: 4px;">\u5728\u540C\u4E00\u4E2A\u65B9\u62EC\u53F7\u5185\u7528 <code>|</code> \u9694\u5F00\uFF0C\u6EE1\u8DB3\u5176\u4E00\u5373\u53EF\u3002</td><td style="padding: 4px;"><code>["\u5929\u6C14" == "\u4E0B\u96E8" | "\u661F\u671F" == "\u5468\u65E5"]</code></td></tr>
-      <tr><td style="padding: 4px;">NOT (\u975E)</td><td style="padding: 4px;">\u9996\u4F4D\u52A0 <code>!</code> \u76F4\u63A5\u53CD\u8F6C\u8BE5\u6761\u4EF6\u3002</td><td style="padding: 4px;"><code>[!"\u60C5\u7EEA" == "\u6124\u6012"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">AND (\u4E0E)</td><td style="padding: 4px;">\u591A\u4E2A\u65B9\u62EC\u53F7\u5E76\u6392\u8FDE\u5199\u3002\u5168\u90E8\u6EE1\u8DB3\u624D\u751F\u6548\u3002</td><td style="padding: 4px;"><code>["\u89D2\u8272\u5217\u8868/***/\u73A9\u5BB6\u597D\u611F\u5EA6" &gt; 50]["\u5F53\u524D\u5730\u70B9" == "\u5929\u53F0"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">OR (\u6216)</td><td style="padding: 4px;">\u5728\u540C\u4E00\u4E2A\u65B9\u62EC\u53F7\u5185\u7528 <code>|</code> \u9694\u5F00\uFF0C\u6EE1\u8DB3\u5176\u4E00\u5373\u53EF\u3002</td><td style="padding: 4px;"><code>["\u5F53\u524D\u5929\u6C14" == "\u4E0B\u96E8" | "\u5F53\u524D\u65F6\u95F4/\u661F\u671F" == "\u5468\u65E5"]</code></td></tr>
+      <tr><td style="padding: 4px;">NOT (\u975E)</td><td style="padding: 4px;">\u9996\u4F4D\u52A0 <code>!</code> \u76F4\u63A5\u53CD\u8F6C\u8BE5\u6761\u4EF6\u3002</td><td style="padding: 4px;"><code>[!"\u89D2\u8272\u5217\u8868/***/\u5F53\u524D\u60C5\u7EEA" == "\u6124\u6012"]</code></td></tr>
     </table>
 
-    <p style="margin: 15px 0 2px 0; font-size: 0.9em;"><b>\u2462 \u7EC4\u5408\u5177\u4F53\u793A\u4F8B</b></p>
+    <p style="margin: 15px 0 2px 0; font-size: 0.9em;"><b>4.3 \u7EC4\u5408\u5177\u4F53\u793A\u4F8B</b></p>
     <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); background: var(--blackA70, rgba(0,0,0,0.1));">
-        <th style="padding: 4px; width: 33%;">\u6761\u4EF6\u6807\u7B7E</th>
-        <th style="padding: 4px; width: 22%;">\u6761\u76EE\u6807\u9898(\u8BED\u4E49)</th>
+        <th style="padding: 4px; width: 55%;">\u6761\u76EE\u6807\u7B7E\u4E0E\u4E16\u754C\u4E66\u6807\u9898</th>
         <th style="padding: 4px; width: 45%;">\u89C4\u5219\u89E3\u8BFB</th>
       </tr>
       <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
-        <td style="padding: 4px;"><code>["\u5730\u70B9" == "\u5929\u53F0"]["\u597D\u611F\u5EA6" &gt; 20]</code></td>
-        <td style="padding: 4px;">\u89E6\u53D1\u7279\u6B8A\u5348\u9910\u4E8B\u4EF6</td>
+        <td style="padding: 4px;"><code>["\u5F53\u524D\u5730\u70B9" == "\u5929\u53F0"]["\u597D\u611F\u5EA6" &gt; 20]</code> \u89E6\u53D1\u7279\u6B8A\u5348\u9910\u4E8B\u4EF6</td>
         <td style="padding: 4px;">\u4E0D\u4EC5\u8981\u5728\u5B66\u6821\u201C\u5929\u53F0\u201D\uFF0C\u4E14\u5BF9\u8C61\u597D\u611F\u5EA6\u5927\u4E8E20\u65F6\u624D\u4F1A\u89E6\u53D1\u3002</td>
       </tr>
       <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
-        <td style="padding: 4px;"><code>["\u7269\u54C1\u680F" \u220B "\u60C5\u4E66" | "\u661F\u671F" == "\u5468\u4E94"]</code></td>
-        <td style="padding: 4px;">\u544A\u767D\u51B2\u52A8\u8BBE\u5B9A</td>
+        <td style="padding: 4px;"><code>["\u73A9\u5BB6/\u7269\u54C1\u680F" \u220B "\u60C5\u4E66" | "\u661F\u671F" == "\u5468\u4E94"]</code> \u544A\u767D\u51B2\u52A8\u8BBE\u5B9A</td>
         <td style="padding: 4px;">\u53EA\u8981\u73A9\u5BB6\u5E26\u7740\u201C\u60C5\u4E66\u201D\uFF0C\u6216\u8005\u662F\u6070\u597D\u78B0\u4E0A\u5BB9\u6613\u51B2\u52A8\u7684\u201C\u5468\u4E94\u201D\uFF0C\u90FD\u4F1A\u6FC0\u6D3B\u8BE5\u72B6\u6001\u8BBE\u5B9A\u3002</td>
       </tr>
       <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
-        <td style="padding: 4px;"><code>[!"\u72B6\u6001" \u2287 "\u751F\u75C5"]["\u91D1\u94B1" &gt; 100]</code></td>
-        <td style="padding: 4px;">\u89E3\u9501\u5468\u672B\u7EA6\u4F1A</td>
+        <td style="padding: 4px;"><code>[!"\u73A9\u5BB6/\u72B6\u6001\u6807\u8BB0" \u2287 "\u751F\u75C5"]["\u91D1\u94B1" &gt; 100]</code> \u89E3\u9501\u5468\u672B\u7EA6\u4F1A</td>
         <td style="padding: 4px;">\u9700\u8981\u73A9\u5BB6\u6CA1\u6709\u201C\u751F\u75C5\u201D\uFF0C\u5E76\u4E14\u201C\u91D1\u94B1\u201D\u8DB3\u591F\u82B1\u9500\uFF0C\u624D\u4F1A\u89E3\u9501\u5468\u672B\u7EA6\u4F1A\u3002</td>
       </tr>
       <tr>
-        <td style="padding: 4px;"><code>["\u9648\u79CB/\u73A9\u5BB6\u597D\u611F\u5EA6" &lt;= $"\u6797\u590F/\u73A9\u5BB6\u597D\u611F\u5EA6"]</code></td>
-        <td style="padding: 4px;">\u9648\u79CB\u7684\u5FC3\u6001:\u795D\u613F</td>
+        <td style="padding: 4px;"><code>["\u9648\u79CB/\u73A9\u5BB6\u597D\u611F\u5EA6" &lt;= $"\u6797\u590F/\u73A9\u5BB6\u597D\u611F\u5EA6"]</code> \u9648\u79CB\u7684\u5FC3\u6001:\u795D\u613F</td>
         <td style="padding: 4px;">\u5B9E\u65F6\u6BD4\u8F83\u4E24\u4E2A\u53D8\u91CF\u503C\uFF0C\u6839\u636E\u4EBA\u9645\u52A8\u6001\u51B3\u5B9A\u89D2\u8272\u884C\u4E3A\u6A21\u5F0F\u3002</td>
       </tr>
     </table>
@@ -275,7 +270,7 @@ ${u}`,t);jr(this,"line");jr(this,"column");jr(this,"codeblock");this.line=i,this
       \u53EF\u7528\u4E8E\u6761\u4EF6\u6807\u7B7E\u5185\u7684\u6240\u6709\u5305\u542B/\u914D\u5BF9\u8FD0\u7B97\u4E2D\uFF0C\u4E5F\u53EF\u4EE5\u7528\u4E8E Schema \u91CC\u7684 <code>$enum</code> \u7B49\u6587\u672C\u6BD4\u5BF9\u7EA6\u675F\u91CC\u3002<br>
       \u2022 **\u6570\u5B57\u5339\u914D**\uFF1A<code>1~2</code>\u4E2A\u661F\u53F7\u4EE3\u8868\u4E25\u683C\u7684\u4E00\u5B57\u4E00\u914D\u3002<code>3</code>\u4E2A\u53CA\u5176\u4EE5\u4E0A\u7684\u661F\u53F7(\u5982 <code>***</code>)\u53EF\u4EE5\u5FFD\u7565\u524D\u5BFC\u6216\u540E\u968F\u957F\u5EA6\uFF0C\u5339\u914D\u4EFB\u610F\u957F\u7684\u5185\u5BB9\u3002
       \u2022 **\u4F4D\u7F6E\u5339\u914D**\uFF1A<code>*</code>\u53F7\u53EF\u4EE5\u51FA\u73B0\u5728\u5B57\u7B26\u4E32\u7684\u5F00\u5934\u3001\u7ED3\u5C3E\u6216\u4E2D\u95F4\uFF0C\u8868\u793A\u8BE5\u4F4D\u7F6E\u53EF\u4EE5\u5339\u914D\u4EFB\u610F\u5B57\u7B26\u5E8F\u5217\u3002
-      \u2022 **\u793A\u4F8B**\uFF1A<code>["\u5730\u70B9" == "***\u68EE\u6797***"]</code> \u53EF\u5339\u914D\u51FA\u201C\u5927\u68EE\u6797\u5185\u90E8\u201D\u3002
+      \u2022 **\u793A\u4F8B**\uFF1A<code>["\u5730\u70B9" == "***\u68EE\u6797***"]</code> \u53EF\u4EE5\u5339\u914D\u201C\u539F\u59CB\u68EE\u6797\u5916\u56F4\u201D\u3001\u201C\u68EE\u6797\u4E2D\u592E\u201D\u7B49\u3002
       </p>
     </div>
   </div>
