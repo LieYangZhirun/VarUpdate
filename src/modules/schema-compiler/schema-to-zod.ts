@@ -330,7 +330,7 @@ function applyMinMax(t: z.ZodType<any>, op: 'min' | 'max', value: any, path: str
 }
 
 /**
- * S4: 使用正确的通配符匹配算法（内联 wildcard-match 核心逻辑）
+ * S4: 使用通配符匹配算法
  */
 function applyEnum(t: z.ZodType<any>, values: any[]): z.ZodType<any> {
   return t.refine(
@@ -395,11 +395,11 @@ function applyEither(baseType: z.ZodType<any>, branches: any[], path: string): z
 }
 
 // ═══════════════════════════════════════════
-//  通配符匹配（内联 wildcard-match 核心算法）
+//  通配符匹配
 // ═══════════════════════════════════════════
 
 /**
- * S4: 通配符模式匹配（与 wildcard-match 公共库逻辑一致）
+ * S4: 通配符模式匹配
  *
  * 规则：1-2 个 * 每个匹配恰好 1 字符；3+ 个 * 匹配任意长度。
  * 大小写不敏感。

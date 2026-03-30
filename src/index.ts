@@ -28,6 +28,7 @@ import { EVENTS } from './modules/event-bus.js';
 import * as notify from './modules/notification.js';
 import { registerMacros } from './modules/macro-engine.js';
 import { renderPanel, registerWandButtons, destroyPanel, refreshDebugState, getPanelSettings } from './modules/ui-panel.js';
+import { registerFilterHooks, unregisterFilterHooks } from './modules/native-filter.js';
 import { getValueByPath } from './shared/path-utils.js';
 import { mergeDeepWithConflictCheck, MergeConflictError } from './shared/merge-deep-conflict.js';
 import type { ExtractedTag, MessageCompletePayload } from './types/index.js';
@@ -133,6 +134,7 @@ async function init(): Promise<void> {
   registerWandButtons();
   unregisterMacros = registerMacros();
   bindEvents();
+  registerFilterHooks();
   await loadSchema();
 
   await autoInitGreeting();
@@ -941,6 +943,7 @@ function cleanup(): void {
     window.removeEventListener('pagehide', cleanup);
   }
   destroyPanel();
+  unregisterFilterHooks();
   unregisterMacros?.();
   eventBus.removeAll();
   notify.debug('卸载', 'VarUpdate 脚本已卸载', { category: 'boot' });

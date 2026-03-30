@@ -113,4 +113,6 @@ export const EVENTS = {
   MESSAGE_SWIPED: 'message_swiped',
   MESSAGE_EDITED: 'message_edited',
   MESSAGE_DELETED: 'message_deleted',
+  WORLDINFO_SCAN_DONE: 'worldinfo_scan_done',
+  SENDING_MESSAGE: 'sending_message',
 } as const;
