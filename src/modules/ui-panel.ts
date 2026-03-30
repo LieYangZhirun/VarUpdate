@@ -154,7 +154,7 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     <div style="margin-top: 20px; padding: 12px; background: var(--blackA70, rgba(0,0,0,0.1)); border: 1px dashed var(--SmartThemeBorderColor, #ccc); border-radius: 6px; text-align: center;">
       <p style="margin: 0 0 8px 0; font-size: 0.95em;">📚 <b>查看完整的配套示例包</b></p>
       <div style="font-size: 0.85em; color: var(--SmartThemeHintColor, #ccc); margin-bottom: 10px;">
-        一套现代恋爱背景的 Schema / Default / Initial / Update 空模板
+        点击下方链接获取完整示例包，包含一组轻量Galgame风的 Schema / Default / Initial / Update 模板。
       </div>
       
       <a href="https://github.com/LieYangZhirun/VarUpdate/tree/main/examples" target="_blank" rel="noopener noreferrer" title="VarUpdate 仓库 · examples 目录" style="display: inline-block; color: var(--SmartThemeBodyColor, #fff); background: #24292e; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 0.85em;">
@@ -171,13 +171,13 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     <h3 style="margin-top: 0; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">3. 插值占位符</h3>
     <p><b>3.1 提取变量值与插入</b><br>
     你可以在预设、角色卡、世界书的任意位置插入<code>{{message/data/具体路径}}</code>这样的占位符，脚本会自动根据变量路径提取叶子节点的具体值，或范围提取父节点的结构并转化为“PromptalYAML”——一种极度节约 Token 的设定专用格式。<br>
-    <span style="color:var(--SmartThemeHintColor, #888); font-size: 0.9em;">*插值占位符的路径解析同样采用了<b>从右向左反向解析的方法</b>：若是路径太长，可以在<code>data/</code>后直接写末尾的具体路径，略过中间部分。</span></p>
+    <span style="color:var(--SmartThemeHintColor, #888); font-size: 0.9em;">插值占位符的路径解析同样采用了<b>从右向左反向解析的方法</b>：若是路径太长，可以在<code>data/</code>后直接写末尾的具体路径，略过中间部分。</span></p>
 
     <p><b>3.2 获取更新记录</b><br>
     通过 <code>{{message/log}}</code>，你可以将最新楼层的变量更新日志单独提取出来（如 <code>角色/HP: 80 → 75</code>）做单独展示。</p>
     
     <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">4. 变量条件标签 (动态开关)</h3>
-    <p>把中括号 <code>[]</code> 放在预设名称、世界书备注、正则等名字的两边，<b>只有里面的条件成真时，这条设定才会被设为启用发送</b>。</p>
+    <p>将<code>[]</code>放在预设名称、世界书备注、正则等名字的两边，<b>只有里面的条件成真时，这条设定才会被设为启用发送</b>。</p>
 
     <p style="margin: 5px 0 2px 0; font-size: 0.9em;"><b>4.1 值运算</b> <span style="color:var(--SmartThemeHintColor, #888);">（支持附录中的通配符规则）</span></p>
     <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
@@ -232,7 +232,7 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
       </tr>
       <tr>
         <td style="padding: 4px;"><code>["角色列表/***/状态标记" ⊇ "中毒"]中毒解法</code></td>
-        <td style="padding: 4px;"><b>群查：</b>使用三星号代表完全任意匹配。只要队伍里有<b>任何一个</b>对象的标记包含中毒，即判定生效。</td>
+        <td style="padding: 4px;">使用<code>***</code>代表完全任意匹配，列表中任何一个对象的标记包含中毒都会激活该条目。</td>
       </tr>
     </table>
 

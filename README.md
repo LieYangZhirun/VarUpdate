@@ -134,16 +134,6 @@ npm run typecheck
 | `SchemaCompileError`  | 模块2 Schema 编译器   | Schema 编译失败                 |
 | `PatchParseError`     | 模块3 JSON Patch 引擎 | Patch 指令文本解析失败          |
 
-## 设计文档
-
-请先阅读 **`架构设计/README.md`**（阅读顺序、文档分工、与 Agents 同步约定）。
-
-- **面向用户功能卡.md** — 用户可感知的功能定义（Schema 语法、Update 语法、宏格式等）
-- **基础设施功能卡.md** — 底层技术模块规格（解析器、编译器、Patch 引擎、存储层等）
-- **接口与契约集中定义.md** — 权威接口参考（事件协议、类型定义、跨脚本契约）
-- **代码规范与工程细节.md** — 工程化约定（构建、错误处理、命名、注释）
-- **测试规范.md** — 测试策略与覆盖要求
-
 ## 跨脚本协作
 
 VarUpdate 可通过事件总线与 Agents 脚本协作：
@@ -153,9 +143,3 @@ VarUpdate 可通过事件总线与 Agents 脚本协作：
 - Agents → VarUpdate：`varupdate:retry_requested` 通知回退变量状态
 
 VarUpdate 亦可独立运行，通过酒馆原生 `MESSAGE_RECEIVED` 事件接收消息。
-
-## 版本与发布
-
-- **语义化版本**：`package.json` 的 `version` 遵循 [SemVer](https://semver.org/lang/zh-CN/)（`主版本.次版本.修订号`）。对外发布以该字段为准；`dist/bundle.js` 随 `npm run build` 更新后应与之一并提交。
-- **日常操作**：修 bug / 小改进 → 修订号 +1；兼容新功能 → 次版本 +1；不兼容变更 → 主版本 +1。可用 `npm version patch|minor|major`（会改 `package.json` 并打 **git 标签** `v*`，需先提交工作区再执行）。
-- **GitHub Release（可选）**：推送标签后在仓库页 **Releases** 里基于与 `package.json` 一致的标签（如 `v1.0.0`）写说明，便于用户对照下载。

@@ -185,7 +185,7 @@ ${o}`,t);Gn(this,"line");Gn(this,"column");Gn(this,"codeblock");this.line=i,this
     <div style="margin-top: 20px; padding: 12px; background: var(--blackA70, rgba(0,0,0,0.1)); border: 1px dashed var(--SmartThemeBorderColor, #ccc); border-radius: 6px; text-align: center;">
       <p style="margin: 0 0 8px 0; font-size: 0.95em;">\u{1F4DA} <b>\u67E5\u770B\u5B8C\u6574\u7684\u914D\u5957\u793A\u4F8B\u5305</b></p>
       <div style="font-size: 0.85em; color: var(--SmartThemeHintColor, #ccc); margin-bottom: 10px;">
-        \u4E00\u5957\u73B0\u4EE3\u604B\u7231\u80CC\u666F\u7684 Schema / Default / Initial / Update \u7A7A\u6A21\u677F
+        \u70B9\u51FB\u4E0B\u65B9\u94FE\u63A5\u83B7\u53D6\u5B8C\u6574\u793A\u4F8B\u5305\uFF0C\u5305\u542B\u4E00\u7EC4\u8F7B\u91CFGalgame\u98CE\u7684 Schema / Default / Initial / Update \u6A21\u677F\u3002
       </div>
       
       <a href="https://github.com/LieYangZhirun/VarUpdate/tree/main/examples" target="_blank" rel="noopener noreferrer" title="VarUpdate \u4ED3\u5E93 \xB7 examples \u76EE\u5F55" style="display: inline-block; color: var(--SmartThemeBodyColor, #fff); background: #24292e; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 0.85em;">
@@ -202,13 +202,13 @@ ${o}`,t);Gn(this,"line");Gn(this,"column");Gn(this,"codeblock");this.line=i,this
     <h3 style="margin-top: 0; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">3. \u63D2\u503C\u5360\u4F4D\u7B26</h3>
     <p><b>3.1 \u63D0\u53D6\u53D8\u91CF\u503C\u4E0E\u63D2\u5165</b><br>
     \u4F60\u53EF\u4EE5\u5728\u9884\u8BBE\u3001\u89D2\u8272\u5361\u3001\u4E16\u754C\u4E66\u7684\u4EFB\u610F\u4F4D\u7F6E\u63D2\u5165<code>{{message/data/\u5177\u4F53\u8DEF\u5F84}}</code>\u8FD9\u6837\u7684\u5360\u4F4D\u7B26\uFF0C\u811A\u672C\u4F1A\u81EA\u52A8\u6839\u636E\u53D8\u91CF\u8DEF\u5F84\u63D0\u53D6\u53F6\u5B50\u8282\u70B9\u7684\u5177\u4F53\u503C\uFF0C\u6216\u8303\u56F4\u63D0\u53D6\u7236\u8282\u70B9\u7684\u7ED3\u6784\u5E76\u8F6C\u5316\u4E3A\u201CPromptalYAML\u201D\u2014\u2014\u4E00\u79CD\u6781\u5EA6\u8282\u7EA6 Token \u7684\u8BBE\u5B9A\u4E13\u7528\u683C\u5F0F\u3002<br>
-    <span style="color:var(--SmartThemeHintColor, #888); font-size: 0.9em;">*\u63D2\u503C\u5360\u4F4D\u7B26\u7684\u8DEF\u5F84\u89E3\u6790\u540C\u6837\u91C7\u7528\u4E86<b>\u4ECE\u53F3\u5411\u5DE6\u53CD\u5411\u89E3\u6790\u7684\u65B9\u6CD5</b>\uFF1A\u82E5\u662F\u8DEF\u5F84\u592A\u957F\uFF0C\u53EF\u4EE5\u5728<code>data/</code>\u540E\u76F4\u63A5\u5199\u672B\u5C3E\u7684\u5177\u4F53\u8DEF\u5F84\uFF0C\u7565\u8FC7\u4E2D\u95F4\u90E8\u5206\u3002</span></p>
+    <span style="color:var(--SmartThemeHintColor, #888); font-size: 0.9em;">\u63D2\u503C\u5360\u4F4D\u7B26\u7684\u8DEF\u5F84\u89E3\u6790\u540C\u6837\u91C7\u7528\u4E86<b>\u4ECE\u53F3\u5411\u5DE6\u53CD\u5411\u89E3\u6790\u7684\u65B9\u6CD5</b>\uFF1A\u82E5\u662F\u8DEF\u5F84\u592A\u957F\uFF0C\u53EF\u4EE5\u5728<code>data/</code>\u540E\u76F4\u63A5\u5199\u672B\u5C3E\u7684\u5177\u4F53\u8DEF\u5F84\uFF0C\u7565\u8FC7\u4E2D\u95F4\u90E8\u5206\u3002</span></p>
 
     <p><b>3.2 \u83B7\u53D6\u66F4\u65B0\u8BB0\u5F55</b><br>
     \u901A\u8FC7 <code>{{message/log}}</code>\uFF0C\u4F60\u53EF\u4EE5\u5C06\u6700\u65B0\u697C\u5C42\u7684\u53D8\u91CF\u66F4\u65B0\u65E5\u5FD7\u5355\u72EC\u63D0\u53D6\u51FA\u6765\uFF08\u5982 <code>\u89D2\u8272/HP: 80 \u2192 75</code>\uFF09\u505A\u5355\u72EC\u5C55\u793A\u3002</p>
     
     <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">4. \u53D8\u91CF\u6761\u4EF6\u6807\u7B7E (\u52A8\u6001\u5F00\u5173)</h3>
-    <p>\u628A\u4E2D\u62EC\u53F7 <code>[]</code> \u653E\u5728\u9884\u8BBE\u540D\u79F0\u3001\u4E16\u754C\u4E66\u5907\u6CE8\u3001\u6B63\u5219\u7B49\u540D\u5B57\u7684\u4E24\u8FB9\uFF0C<b>\u53EA\u6709\u91CC\u9762\u7684\u6761\u4EF6\u6210\u771F\u65F6\uFF0C\u8FD9\u6761\u8BBE\u5B9A\u624D\u4F1A\u88AB\u8BBE\u4E3A\u542F\u7528\u53D1\u9001</b>\u3002</p>
+    <p>\u5C06<code>[]</code>\u653E\u5728\u9884\u8BBE\u540D\u79F0\u3001\u4E16\u754C\u4E66\u5907\u6CE8\u3001\u6B63\u5219\u7B49\u540D\u5B57\u7684\u4E24\u8FB9\uFF0C<b>\u53EA\u6709\u91CC\u9762\u7684\u6761\u4EF6\u6210\u771F\u65F6\uFF0C\u8FD9\u6761\u8BBE\u5B9A\u624D\u4F1A\u88AB\u8BBE\u4E3A\u542F\u7528\u53D1\u9001</b>\u3002</p>
 
     <p style="margin: 5px 0 2px 0; font-size: 0.9em;"><b>4.1 \u503C\u8FD0\u7B97</b> <span style="color:var(--SmartThemeHintColor, #888);">\uFF08\u652F\u6301\u9644\u5F55\u4E2D\u7684\u901A\u914D\u7B26\u89C4\u5219\uFF09</span></p>
     <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
@@ -263,7 +263,7 @@ ${o}`,t);Gn(this,"line");Gn(this,"column");Gn(this,"codeblock");this.line=i,this
       </tr>
       <tr>
         <td style="padding: 4px;"><code>["\u89D2\u8272\u5217\u8868/***/\u72B6\u6001\u6807\u8BB0" \u2287 "\u4E2D\u6BD2"]\u4E2D\u6BD2\u89E3\u6CD5</code></td>
-        <td style="padding: 4px;"><b>\u7FA4\u67E5\uFF1A</b>\u4F7F\u7528\u4E09\u661F\u53F7\u4EE3\u8868\u5B8C\u5168\u4EFB\u610F\u5339\u914D\u3002\u53EA\u8981\u961F\u4F0D\u91CC\u6709<b>\u4EFB\u4F55\u4E00\u4E2A</b>\u5BF9\u8C61\u7684\u6807\u8BB0\u5305\u542B\u4E2D\u6BD2\uFF0C\u5373\u5224\u5B9A\u751F\u6548\u3002</td>
+        <td style="padding: 4px;">\u4F7F\u7528<code>***</code>\u4EE3\u8868\u5B8C\u5168\u4EFB\u610F\u5339\u914D\uFF0C\u5217\u8868\u4E2D\u4EFB\u4F55\u4E00\u4E2A\u5BF9\u8C61\u7684\u6807\u8BB0\u5305\u542B\u4E2D\u6BD2\u90FD\u4F1A\u6FC0\u6D3B\u8BE5\u6761\u76EE\u3002</td>
       </tr>
     </table>
 
