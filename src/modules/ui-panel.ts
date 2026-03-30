@@ -203,7 +203,7 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
         <th style="padding: 4px; width: 45%;">规则描述</th>
         <th style="padding: 4px; width: 40%;">配置示例</th>
       </tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">AND (与)</td><td style="padding: 4px;">多个方括号并排连写。全部满足才生效。</td><td style="padding: 4px;"><code>["角色列表/陈秋/玩家好感度" &gt; 50]["当前地点" == "天台"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">AND (与)</td><td style="padding: 4px;">多个方括号并排连写。全部满足才生效。</td><td style="padding: 4px;"><code>["陈秋/玩家好感度" &gt; 50]["当前地点" == "天台"]</code></td></tr>
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">OR (或)</td><td style="padding: 4px;">在同一个方括号内用 <code>|</code> 隔开，满足其一即可。</td><td style="padding: 4px;"><code>["当前天气" == "下雨" | "当前时间/星期" == "周日"]</code></td></tr>
       <tr><td style="padding: 4px;">NOT (非)</td><td style="padding: 4px;">首位加 <code>!</code> 直接反转该条件。</td><td style="padding: 4px;"><code>[!"陈秋/当前情绪" == "愤怒"]</code></td></tr>
     </table>
