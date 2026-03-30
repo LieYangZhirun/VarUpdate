@@ -144,7 +144,12 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     用于在开场白设置或在故事中重置剧情状态。它会<b>完全清空当前的变量</b>，根据解析结果重新建立初始状态。<span style="color:var(--SmartThemeHintColor, #888);">同样支持JSON、YAML、TOML三种格式。</span></p>
 
     <p><b>2.2 动态更新 &lt;Var_Update&gt;</b><br>
-    在普通的聊天对话里输出，用来<b>修改现有的变量</b>。须遵循JSON Patch规范，支持替换（<code>replace</code>）、新增（<code>insert</code>，路径末尾写 <code>/-</code> 代表加到数组末尾）、删除（<code>delete</code>）三种操作。</p>
+    在普通的聊天对话里由 AI 或玩家输出，用来<b>修改现有的变量</b>。系统对此具备极强的<b>容错与适应能力</b>：<br>
+    <span style="font-size: 0.9em; display: block; margin-top: 4px;">
+    • <b>格式智能纠偏：</b>哪怕模型输出带有Markdown代码块、缺失部分括号，依然能被底层捕获引擎精确提取；<br>
+    • <b>图式自动对齐：</b>基于 Zod 编译的运行时防护网，结合 <code>(force)</code> 类型，能将错误格式（如数字变字符串、结构漂移）强转回合法状态，或安全丢弃无法抢救的畸形指令，保证数据绝对的安全；<br>
+    • <b>规范标准动作：</b>需遵循 JSON Patch 思想，支持替换（<code>replace</code>）、新增（<code>insert</code>，路径末尾写 <code>/-</code> 代表加到数组末尾）、删除（<code>delete</code>）三种明确操作。
+    </span></p>
 
     <!-- 综合示例导览框 -->
     <div style="margin-top: 20px; padding: 12px; background: var(--blackA70, rgba(0,0,0,0.1)); border: 1px dashed var(--SmartThemeBorderColor, #ccc); border-radius: 6px; text-align: center;">
@@ -170,8 +175,9 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
   <!-- 右列：宏与条件 -->
   <div style="flex: 1;">
     <h3 style="margin-top: 0; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">3. 插值占位符</h3>
-    <p><b>3.1 提取当前变量</b><br>
-    你可以在预设、角色卡、世界书的任意位置插入<code>{{message/data/具体路径}}</code>这样的占位符，脚本会自动根据变量路径提取叶子节点的具体值，或范围提取父节点的结构、转化为“PromptalYAML”——一种非常节约Token的提示词专用格式。</p>
+    <p><b>3.1 灵活提取与规范化寻址</b><br>
+    你可以在预设、角色卡、世界书的任意位置插入<code>{{message/data/具体路径}}</code>这样的占位符，脚本会自动根据变量路径提取叶子节点的具体值，或范围提取父节点的结构并转化为“PromptalYAML”——一种极度节约 Token 的设定专用格式。<br>
+    <span style="color:var(--SmartThemeHintColor, #888); font-size: 0.9em;">*无论是插值替换、动态更新 <code>path</code> 还是条件检测，系统的引擎皆配备了<b>灵活路径解析能力</b>：即便被混入了空格，或者参杂了 <code>.对象</code>、<code>["对象"]</code> 等由于 AI 幻觉引发的非标写法，都能被引擎无缝平滑并精准定位！</span></p>
 
     <p><b>3.2 获取更新记录</b><br>
     通过 <code>{{message/log}}</code>，你可以将最新楼层的变量更新日志单独提取出来（如 <code>角色/HP: 80 → 75</code>）做单独展示。</p>
