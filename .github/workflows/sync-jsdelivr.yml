@@ -1,0 +1,36 @@
+# 酒馆里固定写 @v1.0.0 的 import 时：每次 push 到 main 后把标签挪到最新提交并清 CDN，
+# 这样不用改助手脚本，刷新页面即可尽量拉到新 bundle（浏览器若仍旧可试 Ctrl+F5）。
+name: Sync tag v1.0.0 and purge jsDelivr
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync-and-purge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Move v1.0.0 to HEAD and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f v1.0.0 HEAD
+          git push origin refs/tags/v1.0.0 --force
+
+      - name: Purge jsDelivr (cdn + 国内 testingcf 同源路径)
+        run: |
+          REPO="${{ github.repository }}"
+          for ref in "v1.0.0" "main"; do
+            echo "purge gh/${REPO}@${ref}/dist/bundle.js"
+            curl -fsS "https://purge.jsdelivr.net/gh/${REPO}@${ref}/dist/bundle.js" || echo "purge failed: ${ref}"
+          done
