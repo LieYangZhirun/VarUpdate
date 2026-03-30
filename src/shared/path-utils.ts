@@ -233,64 +233,67 @@ export function getFuzzyValueByPath(data: any, path: string): any {
   return undefined;
 }
 
+export interface WildcardPathResult {
+  isWildcard: boolean;
+  values: any[];
+}
+
 /**
- * 带有通配符的路径寻址
- * 
- * 如果路径中包含通配符，则进行树状分叉遍历，寻找所有合法分支，收集匹配到达终点的叶子节点值。
- * 如果路径中不包含通配符，则直接退化为调用 getFuzzyValueByPath。
- * 
- * @param data 根对象
- * @param path 带有通配符（如 `*`）的查找路径
- * @returns 是否触发了多分支匹配，以及搜集到的所有叶子节点值集合
+ * 支持单节点或多节点通配符的路径寻址
+ * 沿着含有通配符的层级递归展开，返回所有符合条件的叶子值集合。
+ * 如果没有通配符，则无缝转交 getFuzzyValueByPath 并包裹成数组格式。
  */
-export function getValuesByWildcardPath(data: any, path: string): { isWildcard: boolean, values: any[] } {
+export function getValuesByWildcardPath(data: any, path: string): WildcardPathResult {
   if (!hasWildcard(path)) {
-    const val = getFuzzyValueByPath(data, path);
-    return { isWildcard: false, values: val !== undefined ? [val] : [] };
+    const directVal = getFuzzyValueByPath(data, path);
+    return {
+      isWildcard: false,
+      values: directVal !== undefined ? [directVal] : []
+    };
   }
 
   const segments = parsePath(path);
-  if (segments.length === 0) return { isWildcard: true, values: [] };
+  const results: any[] = [];
 
-  const collected: any[] = [];
-  
-  function walk(current: any, segIndex: number) {
-    if (current === null || current === undefined) return;
-    
-    // 如果已经跨过最后一段路径指示，把当前对象收集起来
-    if (segIndex >= segments.length) {
-      if (current !== undefined) collected.push(current);
+  function traverse(current: any, depth: number) {
+    if (depth === segments.length) {
+      if (current !== undefined && current !== null) {
+        results.push(current);
+      }
       return;
     }
-    
-    // 如果还未走到底就已经遇到非对象（无法进一步潜入），则该分支探索失败
-    if (typeof current !== 'object') return;
 
-    const seg = segments[segIndex];
+    if (current === null || current === undefined || typeof current !== 'object') {
+      return;
+    }
+
+    const seg = segments[depth];
+
     if (hasWildcard(seg)) {
-      // 该段含有通配符：遍历对象的全部合法键并进行 wildcardMatch 筛选
-      const keys = Array.isArray(current) 
-        ? current.map((_, i) => String(i)) 
+      // 遍历当前层级所有的 key 进行通配符比对
+      const entries = Array.isArray(current)
+        ? current.map((_, i) => String(i))
         : Object.keys(current);
-        
-      for (const k of keys) {
+
+      for (const k of entries) {
         if (wildcardMatch(seg, k)) {
-          walk((current as any)[k], segIndex + 1);
+          traverse(current[k], depth + 1);
         }
       }
     } else {
-      // 该段不含通配符：作为精准字面量匹配，仅对这单个分支继续探索
+      // 普通层级精准步入
       if (Array.isArray(current) && /^\d+$/.test(seg)) {
-        const idx = parseInt(seg, 10);
-        if (idx >= 0 && idx < current.length) walk(current[idx], segIndex + 1);
-      } else if (seg in current) {
-        walk((current as any)[seg], segIndex + 1);
+        traverse(current[parseInt(seg, 10)], depth + 1);
+      } else {
+        traverse(current[seg], depth + 1);
       }
     }
   }
 
-  walk(data, 0);
+  traverse(data, 0);
 
-  return { isWildcard: true, values: collected };
+  return {
+    isWildcard: true,
+    values: results
+  };
 }
-

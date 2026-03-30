@@ -179,7 +179,7 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">4. 变量条件标签 (动态开关)</h3>
     <p>把中括号 <code>[]</code> 放在预设名称、世界书备注、正则等名字的两边，<b>只有里面的条件成真时，这条设定才会被设为启用发送</b>。</p>
 
-    <p style="margin: 5px 0 2px 0; font-size: 0.9em;"><b>4.1 值运算</b> <span style="color:var(--SmartThemeHintColor, #888);">（数值、存在性检查、以及通配符比对与群体扫描）</span></p>
+    <p style="margin: 5px 0 2px 0; font-size: 0.9em;"><b>4.1 值运算</b> <span style="color:var(--SmartThemeHintColor, #888);">（支持附录中的通配符规则）</span></p>
     <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); background: var(--blackA70, rgba(0,0,0,0.1));">
         <th style="padding: 4px; width: 15%;">运算符</th>
@@ -231,8 +231,8 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
         <td style="padding: 4px;">实时比较两个变量值，根据人际动态决定角色行为模式。</td>
       </tr>
       <tr>
-        <td style="padding: 4px;"><code>["队伍/*/状态" ⊇ "中毒"]全员解毒祈祷</code></td>
-        <td style="padding: 4px;">只要带有<code>*</code>，引擎就会把该路径符合的节点全部列为集合（群体扫描）。只要队伍中<b>有任何一个人</b>中毒，就会立刻触发该事件！</td>
+        <td style="padding: 4px;"><code>["角色列表/***/状态标记" ⊇ "中毒"]中毒解法</code></td>
+        <td style="padding: 4px;"><b>群查：</b>使用三星号代表完全任意匹配。只要队伍里有<b>任何一个</b>对象的标记包含中毒，即判定生效。</td>
       </tr>
     </table>
 
@@ -240,9 +240,10 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     <div style="margin-top: 25px; padding: 10px; border-radius: 6px; background: var(--blackA70, rgba(0,0,0,0.1)); border: 1px dashed var(--SmartThemeBorderColor, #ccc);">
       <h4 style="margin: 0 0 6px 0; font-size: 0.95em;">附录：通配符 <code>*</code></h4>
       <p style="margin: 0; font-size: 0.85em; color: var(--SmartThemeHintColor, #888);">
-      <b>1. 替代具体的值（右侧位置）</b>：用于所有的包含/配对运算中以模糊匹配字眼。比如 <code>["地点" == "***森林***"]</code>。<br>
-      <b>2. 进行群体扫描（左侧路径）</b>：你可以把星号放在变量的路径里面（比如 <code>队伍/*/好感度 &gt; 50</code>），引擎会抓回所有分支进行判断。只要其中<b>任意一个成员</b>符合要求，整个条件立刻通过（搜查/求救神技）！<br>
-      • <b>字符规则</b>：<code>1~2</code>个星号代表严格的一字一配。<code>3</code>个极其以上的星号(如 <code>***</code>)可以忽略前缀或后缀的长度匹配任意内容。
+      通配符可用于右侧的值比对运算，也可直接用于<b>左侧的动态路径群查</b>中（见上方 4.3 示例）。<br>
+      • **个数匹配**：<code>1~2</code>个星号代表<b>严格的一字一配</b>。<code>3</code>个及其以上星号(如 <code>***</code>)可以忽略前导或后随长度，匹配任意长的内容。如果当作常规的"全部包含"通配符用，请一定写三个星！<br>
+      • **位置匹配**：<code>*</code>号可出现在开头、结尾或中间。示例：<code>["地点" == "***森林***"]</code> 匹配“原始森林外围”。<br>
+      • **路径群查**：如 <code>["背包/***宝石/数量" > 0]</code> 会去遍历背包内所有以宝石结尾的物品，当找出多个时采用<b>隐式群查机制</b>——只要有任意一项满足要求（数量大于0），整条语句就判为真。
       </p>
     </div>
   </div>

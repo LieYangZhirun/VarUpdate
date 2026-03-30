@@ -7,9 +7,8 @@
  * 支撑功能：面向用户功能卡 十三·L-1 ~ L-14
  */
 
-import { getFuzzyValueByPath } from '../shared/path-utils.js';
+import { getFuzzyValueByPath, getValuesByWildcardPath } from '../shared/path-utils.js';
 import { hasWildcard, wildcardMatch } from '../shared/wildcard.js';
-import { getValuesByWildcardPath } from '../shared/path-utils.js';
 
 // ═══════════════════════════════════════════
 //  公开接口
@@ -104,25 +103,33 @@ function evaluateBody(body: string, data: Record<string, any>): boolean {
   // ── 存在性检查 ？ / !? ──
   if (rest === '?') {
     const leftRes = getValuesByWildcardPath(data, varPath);
-    if (leftRes.isWildcard) {
-      return leftRes.values.length > 0;
-    }
-    const val = leftRes.values[0];
-    return val !== undefined && val !== null;
+    return leftRes.values.some(v => v !== undefined && v !== null);
   }
   if (rest === '!?') {
     const leftRes = getValuesByWildcardPath(data, varPath);
-    if (leftRes.isWildcard) {
-      return leftRes.values.length === 0;
-    }
-    const val = leftRes.values[0];
-    return val === undefined || val === null;
+    return !leftRes.values.some(v => v !== undefined && v !== null);
   }
 
-  // ── 取左值 ──
-  const leftRes = getValuesByWildcardPath(data, varPath);
+  // ── 长度运算符 # ──
+  if (rest.startsWith('#')) {
+    rest = rest.slice(1).trim();
+    const leftRes = getValuesByWildcardPath(data, varPath);
+    if (leftRes.isWildcard) {
+      if (leftRes.values.length === 0) return false;
+      return leftRes.values.some(v => {
+        const len = getCollectionLength(v);
+        if (len === null) return false;
+        return evaluateLengthComparison(len, rest);
+      });
+    } else {
+      const val = leftRes.values.length > 0 ? leftRes.values[0] : undefined;
+      const len = getCollectionLength(val);
+      if (len === null) return false;
+      return evaluateLengthComparison(len, rest);
+    }
+  }
 
-  // ── 集合逻辑判断 ──
+  // ── 普通运算符 ──
   const opParse = parseOperator(rest);
   if (!opParse) {
     warn(`无法解析运算符: ${body}`);
@@ -130,45 +137,25 @@ function evaluateBody(body: string, data: Record<string, any>): boolean {
   }
 
   const operator = opParse.op;
-  const conditionRest = rest.slice(opParse.end).trim();
+  rest = rest.slice(opParse.end).trim();
 
   // ── 右操作数 ──
-  const rightValue = parseRightOperand(conditionRest, data);
+  const rightValue = parseRightOperand(rest, data);
   if (rightValue === PARSE_FAILED) {
     warn(`无法解析右操作数: ${body}`);
     return false;
   }
 
+  // ── 取左值 ──
+  const leftRes = getValuesByWildcardPath(data, varPath);
+
+  // ── 执行比较 ──
   if (leftRes.isWildcard) {
-    if (leftRes.values.length === 0) {
-      // 没有任何合法的左侧匹配项时，长度#必定是判错
-      if (rest.startsWith('#')) return false;
-      return false;
-    }
-
-    // ── 长度运算符 # (针对隐式集合每个元素) ──
-    if (rest.startsWith('#')) {
-      return leftRes.values.some((v: any) => {
-        const len = getCollectionLength(v);
-        if (len === null) return false;
-        return evaluateLengthComparison(len, conditionRest);
-      });
-    }
-
-    // ── 普通比较 (隐式集合 SOME 逻辑) ──
-    return leftRes.values.some((v: any) => compare(v, operator, rightValue));
-
+    if (leftRes.values.length === 0) return false; // 没有命中任何节点
+    return leftRes.values.some(v => compare(v, operator, rightValue));
   } else {
-    const leftValue = leftRes.values[0];
-
-    // ── 长度运算符 # ──
-    if (rest.startsWith('#')) {
-      const len = getCollectionLength(leftValue);
-      if (len === null) return false;
-      return evaluateLengthComparison(len, conditionRest);
-    }
-    
-    return compare(leftValue, operator, rightValue);
+    // 单值比对
+    return compare(leftRes.values.length > 0 ? leftRes.values[0] : undefined, operator, rightValue);
   }
 }
 

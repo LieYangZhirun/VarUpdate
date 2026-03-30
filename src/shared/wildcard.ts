@@ -1,22 +1,22 @@
 /**
  * shared/wildcard.ts
- *
- * 全局通配符匹配引擎
- * 用于条件表达式右侧匹配、Schema 规则判断，以及变量寻址路径中的分叉收集。
+ * 
+ * 字符串通配符匹配工具库
+ * 规则（与 Schema $enum 通配符一致）：
+ * - 1~2 个 *：每个 * 匹配恰好 1 个字符
+ * - 3 个及以上 *：连续 * 组匹配任意数量字符（0 到无穷）
+ * - 大小写不敏感
  */
 
 /** 检查字符串是否包含通配符 */
 export function hasWildcard(s: string): boolean {
-  return typeof s === 'string' && s.includes('*');
+  return s.includes('*');
 }
 
 /**
  * 通配符模式匹配
  *
- * 规则（全系统通用）：
- * - 1~2 个 *：每个 * 匹配恰好 1 个字符
- * - 3 个及以上 *：连续 * 组匹配任意数量字符（0 到无穷）
- * - 大小写不敏感
+ * 根据自定义星号长度生成正则表达式并测试。
  */
 export function wildcardMatch(pattern: string, text: string): boolean {
   const p = pattern.toLowerCase();
@@ -34,7 +34,8 @@ export function wildcardMatch(pattern: string, text: string): boolean {
   }
 }
 
-function buildWildcardRegex(chars: string[], starCount: number): string {
+/** 组装通配符的底层正则表达式字符串 */
+export function buildWildcardRegex(chars: string[], starCount: number): string {
   const parts: string[] = [];
   let i = 0;
   while (i < chars.length) {
@@ -47,7 +48,6 @@ function buildWildcardRegex(chars: string[], starCount: number): string {
         parts.push('.*');
       }
     } else {
-      // 转义其他正则元字符
       parts.push(chars[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
       i++;
     }
