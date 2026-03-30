@@ -11,7 +11,7 @@
 
 import { serializeToPromptalYAML } from '../shared/promptal-yaml.js';
 import { readVariables } from './variable-store.js';
-import { getValueByPath } from '../shared/path-utils.js';
+import { getFuzzyValueByPath } from '../shared/path-utils.js';
 import { filterMessageDataForMacro } from '../shared/filter-macro-data-by-schema-hide.js';
 import { getCachedSchema } from './schema-compiler/index.js';
 import * as notify from './notification.js';
@@ -170,8 +170,8 @@ function resolveValue(scope: string, field: string, varPath: string, messageId?:
 
   if (!varPath) return fieldData;
 
-  // 沿路径取值
-  return getValueByPath(fieldData, varPath);
+  // 沿路径模糊取值
+  return getFuzzyValueByPath(fieldData, varPath);
 }
 
 /**

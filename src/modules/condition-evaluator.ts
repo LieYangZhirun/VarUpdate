@@ -7,7 +7,7 @@
  * 支撑功能：面向用户功能卡 十三·L-1 ~ L-14
  */
 
-import { getValueByPath } from '../shared/path-utils.js';
+import { getFuzzyValueByPath } from '../shared/path-utils.js';
 
 // ═══════════════════════════════════════════
 //  公开接口
@@ -101,18 +101,18 @@ function evaluateBody(body: string, data: Record<string, any>): boolean {
 
   // ── 存在性检查 ？ / !? ──
   if (rest === '?') {
-    const val = getValueByPath(data, varPath);
+    const val = getFuzzyValueByPath(data, varPath);
     return val !== undefined && val !== null;
   }
   if (rest === '!?') {
-    const val = getValueByPath(data, varPath);
+    const val = getFuzzyValueByPath(data, varPath);
     return val === undefined || val === null;
   }
 
   // ── 长度运算符 # ──
   if (rest.startsWith('#')) {
     rest = rest.slice(1).trim();
-    const val = getValueByPath(data, varPath);
+    const val = getFuzzyValueByPath(data, varPath);
     const len = getCollectionLength(val);
     if (len === null) return false;
     return evaluateLengthComparison(len, rest);
@@ -136,7 +136,7 @@ function evaluateBody(body: string, data: Record<string, any>): boolean {
   }
 
   // ── 取左值 ──
-  const leftValue = getValueByPath(data, varPath);
+  const leftValue = getFuzzyValueByPath(data, varPath);
 
   // ── 执行比较 ──
   return compare(leftValue, operator, rightValue);
@@ -204,7 +204,7 @@ function parseRightOperand(text: string, data: Record<string, any>): any {
   if (trimmed.startsWith('$')) {
     const refParse = parseQuotedString(trimmed, 1);
     if (!refParse) return PARSE_FAILED;
-    return getValueByPath(data, refParse.value);
+    return getFuzzyValueByPath(data, refParse.value);
   }
 
   // 布尔字面量

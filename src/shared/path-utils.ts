@@ -167,3 +167,66 @@ export function findAllPaths(data: any, leafKey: string, currentPath: string = '
 
   return results;
 }
+
+/**
+ * 反向模糊路径解析 (只读寻址)
+ *
+ * 类似 JSON Patch 的反向搜索逻辑，但仅用于已存在的读取：
+ * 1. 拿叶子键全局搜索所有同名路径
+ * 2. 用剩下的祖先节点从右向左进行消歧义过滤
+ * 3. 只有剩下唯一结果时，才返回真实绝对路径
+ */
+export function resolveFuzzyPath(data: any, fuzzyPath: string): string | null {
+  const segments = parsePath(fuzzyPath);
+  if (segments.length === 0) return null;
+
+  const leafKey = segments[segments.length - 1];
+
+  // 特殊情况：如果是以数字或短横线结尾，大概率是严格数组操作，跳过模糊寻址
+  if (leafKey === '-' || /^\d+$/.test(leafKey)) {
+    return null;
+  }
+
+  // 1. 全局搜索匹配叶子的所有绝对路径
+  const candidates = findAllPaths(data, leafKey);
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  // 2. 多项结果，从倒数第二层进行反向消歧义
+  let filtered = [...candidates];
+  for (let i = segments.length - 2; i >= 0 && filtered.length > 1; i--) {
+    const ancestorKey = segments[i];
+    if (/^\d+$/.test(ancestorKey)) continue; // 跳过数字段（数组索引不参与名字匹配）
+
+    filtered = filtered.filter(candidatePath => {
+      const candidateSegments = parsePath(candidatePath);
+      return candidateSegments.includes(ancestorKey);
+    });
+  }
+
+  // 3. 收敛为唯一明确结果
+  if (filtered.length === 1) return filtered[0];
+
+  // 仍有歧义，尝试精准完全匹配原始路径
+  const exactMatch = filtered.find(c => c === fuzzyPath);
+  if (exactMatch) return exactMatch;
+
+  return null;
+}
+
+/**
+ * 获取变量值：优先精准命中，失败则采用模糊反向寻址兜底
+ * 适用于条件判定和插值宏等读取行为
+ */
+export function getFuzzyValueByPath(data: any, path: string): any {
+  // 1. 尝试直接精准确切命中
+  const exact = getValueByPath(data, path);
+  if (exact !== undefined) return exact;
+
+  // 2. 失败后进入模糊反向寻址补救
+  const resolvedPath = resolveFuzzyPath(data, path);
+  if (resolvedPath) {
+    return getValueByPath(data, resolvedPath);
+  }
+  return undefined;
+}
