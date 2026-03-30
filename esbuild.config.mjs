@@ -17,5 +17,5 @@ build({
   minify: !isDev,
   legalComments: 'external',
 }).then(() => {
-  console.log(`✅ VarUpdate build complete (${isDev ? 'dev' : 'prod'}) — full bundle, no externals`);
+  console.log(`VarUpdate build complete (${isDev ? 'dev' : 'prod'}): bundled ESM, no externals`);
 }).catch(() => process.exit(1));

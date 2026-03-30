@@ -30,17 +30,21 @@ VarUpdate/
 │   │   ├── macro-engine.ts               # 模块6：插值宏引擎
 │   │   ├── event-bus.ts                  # 模块7：事件总线
 │   │   ├── notification.ts               # 模块8：通知系统
-│   │   └── ui-panel.ts                   # 模块9：UI 面板
+│   │   ├── ui-panel.ts                   # 模块9：UI 面板
+│   │   ├── condition-evaluator.ts        # 模块10：条件求值（世界书/预设名中的 []）
+│   │   └── native-filter.ts              # 模块11：原生过滤 Hook
 │   ├── shared/
 │   │   ├── path-utils.ts                 # 路径工具（parsePath/get/set/deleteByPath）
 │   │   ├── promptal-yaml.ts              # PromptalYAML 序列化器
 │   │   ├── filter-macro-data-by-schema-hide.ts  # Schema $hide 过滤
+│   │   ├── schema-force-primitives.ts    # (force) 类型名集合（与编译器、宏侧共用）
 │   │   └── merge-deep-conflict.ts        # 深度合并（冲突检测）
 │   └── types/
 │       └── index.ts                      # 共享类型定义（含 ScriptError 基类）
 ├── tests/                                # vitest 测试
 ├── dist/                                 # esbuild 构建输出
-├── 架构设计/                              # 设计文档
+├── 架构设计/                              # 设计文档（先读 架构设计/README.md）
+│   ├── README.md                         # 文档导读与维护约定
 │   ├── 面向用户功能卡.md
 │   ├── 基础设施功能卡.md
 │   ├── 接口与契约集中定义.md
@@ -108,6 +112,9 @@ npm test
 
 # 监听模式测试
 npm run test:watch
+
+# 仅 TypeScript 类型检查（不写 dist）
+npm run typecheck
 ```
 
 ## 技术栈
@@ -129,7 +136,7 @@ npm run test:watch
 
 ## 设计文档
 
-详细的架构设计和接口规范请参阅 `架构设计/` 目录下的文档：
+请先阅读 **`架构设计/README.md`**（阅读顺序、文档分工、与 Agents 同步约定）。
 
 - **面向用户功能卡.md** — 用户可感知的功能定义（Schema 语法、Update 语法、宏格式等）
 - **基础设施功能卡.md** — 底层技术模块规格（解析器、编译器、Patch 引擎、存储层等）
@@ -146,3 +153,9 @@ VarUpdate 可通过事件总线与 Agents 脚本协作：
 - Agents → VarUpdate：`varupdate:retry_requested` 通知回退变量状态
 
 VarUpdate 亦可独立运行，通过酒馆原生 `MESSAGE_RECEIVED` 事件接收消息。
+
+## 版本与发布
+
+- **语义化版本**：`package.json` 的 `version` 遵循 [SemVer](https://semver.org/lang/zh-CN/)（`主版本.次版本.修订号`）。对外发布以该字段为准；`dist/bundle.js` 随 `npm run build` 更新后应与之一并提交。
+- **日常操作**：修 bug / 小改进 → 修订号 +1；兼容新功能 → 次版本 +1；不兼容变更 → 主版本 +1。可用 `npm version patch|minor|major`（会改 `package.json` 并打 **git 标签** `v*`，需先提交工作区再执行）。
+- **GitHub Release（可选）**：推送标签后在仓库页 **Releases** 里基于 `v1.0.1` 写说明，便于用户对照下载。

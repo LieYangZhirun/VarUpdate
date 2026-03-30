@@ -6,8 +6,9 @@
  * @module schema-to-zod
  */
 
-// z（Zod）由酒馆助手注入到 iframe 全局，无需 import
-
+// z（Zod）由宿主注入全局，无 import；下列为项目内依赖。
+import { FORCE_PRIMITIVE_NAMES_LOWER } from '../../shared/schema-force-primitives.js';
+import { ScriptError } from '../../types/index.js';
 
 // ═══════════════════════════════════════════
 //  公开类型
@@ -27,8 +28,6 @@ export interface ValidationResult {
   success: boolean;
   errors: Array<{ path: string; message: string; expected: string; received: any }>;
 }
-
-import { ScriptError } from '../../types/index.js';
 
 export class SchemaCompileError extends ScriptError {
   constructor(
@@ -203,7 +202,7 @@ function resolveType(typeStr: string, path: string): z.ZodType<any> {
 
 function resolveTypeOrDef(name: string, path: string): z.ZodType<any> {
   const lower = name.toLowerCase();
-  if (['number', 'integer', 'string', 'boolean', 'any'].includes(lower) || lower.endsWith('(force)')) {
+  if (['number', 'integer', 'string', 'boolean', 'any'].includes(lower) || FORCE_PRIMITIVE_NAMES_LOWER.has(lower)) {
     return resolveType(name, path);
   }
   return resolveDefRef(name, path);

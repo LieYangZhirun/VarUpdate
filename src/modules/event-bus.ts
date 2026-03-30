@@ -77,7 +77,7 @@ export function once(eventName: string, handler: (payload: any) => void): { stop
 /**
  * 注销本脚本注册的全部事件监听。
  *
- * 先调用宿主 `eventClearAll()`，再清空本地追踪列表，避免清理失败时过早丢失重试所需引用。
+ * 先尝试宿主 `eventClearAll()`；再对本地记录的 listener 逐个 `stop()`（宿主未提供 ClearAll 或未能覆盖本脚本监听时仍可释放）。
  */
 export function removeAll(): void {
   try {
@@ -86,6 +86,13 @@ export function removeAll(): void {
     }
   } catch {
     // 静默
+  }
+  for (const { stop } of registeredListeners) {
+    try {
+      stop();
+    } catch {
+      // 静默
+    }
   }
   registeredListeners.length = 0;
 }

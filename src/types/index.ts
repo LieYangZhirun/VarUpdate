@@ -181,6 +181,14 @@ export interface RetryRequestedPayload {
   messageIndex: number;
 }
 
+/** 与《接口与契约》WriteMode 一致；Agents 经 `message_complete` 传入。 */
+export type WriteMode =
+  | 'parse_only'
+  | 'user'
+  | 'assistant'
+  | 'append'
+  | 'overwrite';
+
 /**
  * Agents 通过 `agents:message_complete` 传入。
  *
@@ -188,7 +196,7 @@ export interface RetryRequestedPayload {
  * 即便「仅解析 / 预览」尚未把正文写入该楼层的持久化消息，只要逻辑上在生成/预览第 N 楼，
  * 也应传入 **N**；与是否落库 mes 无关。缺省时 VarUpdate 会回退为当前 chat 最后一楼（可能偏题）。
  *
- * **writeMode**：宿主/Agents 对写回模式的标记；VarUpdate 当前不据此跳过变量写入（变量与 mes 持久化解耦）。
+ * **writeMode**：不据此改变变量写入语义（与 mes 持久化解耦）；通知等级为 debug 时对非空值输出 `trace`，便于与 Agents 对账。
  */
 export interface MessageCompletePayload {
   agentId: string;
@@ -197,5 +205,5 @@ export interface MessageCompletePayload {
   content: string;
   reasoning?: string;
   messageIndex?: number;
-  writeMode: string;
+  writeMode?: WriteMode;
 }

@@ -4,6 +4,7 @@
  */
 
 import { getValueByPath, parsePath } from './path-utils.js';
+import { FORCE_PRIMITIVE_NAMES_LOWER } from './schema-force-primitives.js';
 
 const PRIMITIVE_TYPES = new Set([
   'number',
@@ -17,7 +18,7 @@ const PRIMITIVE_TYPES = new Set([
 function isPrimitiveTypeName(s: string): boolean {
   const t = s.trim().toLowerCase();
   if (PRIMITIVE_TYPES.has(t)) return true;
-  if (t === 'number(force)' || t === 'integer(force)' || t === 'string(force)') return true;
+  if (FORCE_PRIMITIVE_NAMES_LOWER.has(t)) return true;
   return false;
 }
 

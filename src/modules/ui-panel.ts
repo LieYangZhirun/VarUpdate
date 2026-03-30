@@ -144,7 +144,7 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     用于在开场白设置或在故事中重置剧情状态。它会<b>完全清空当前的变量</b>，根据解析结果重新建立初始状态。<span style="color:var(--SmartThemeHintColor, #888);">同样支持JSON、YAML、TOML三种格式。</span></p>
 
     <p><b>2.2 动态更新 &lt;Var_Update&gt;</b><br>
-    在聊天过程中输出，用来<b>修改现有的变量</b>，支持替换（<code>replace</code>）、新增（<code>insert</code>，路径末尾写 <code>/-</code> 代表加到数组末尾）、删除（<code>delete</code>）三种操作。针对大语言模型输出的不稳定性，引擎额外特化了容错机制</b>：<br>
+    在聊天过程中输出，用来<b>修改现有的变量</b>，支持替换（<code>replace</code>）、新增（<code>insert</code>，路径末尾写 <code>/-</code> 代表加到数组末尾）、删除（<code>delete</code>）三种操作。针对大语言模型输出的不稳定性，引擎额外<b>特化了容错机制</b>：<br>
     <span style="font-size: 0.9em; display: block; margin-top: 4px;">
     • <b>格式适应：</b>针对字符串中出现未转义双引号或整体缺失部分括号的错误，引擎会从每行的首位双向解析并尝试为引号/括号配对，以解决传统单向解析导致的深度匹配错误；<br>
     • <b>路径适应：</b>针对大语言模型输出错误或不完整路径的问题，引擎会尝试从右向左反向解析，对照键名使用排除法尝试找到唯一对象。<br>
@@ -157,13 +157,8 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
         一套现代恋爱背景的 Schema / Default / Initial / Update 空模板
       </div>
       
-      <!-- 外链导航 -->
-      <a href="https://github.com/LieYangZhirun/VarUpdate/tree/main/examples" target="_blank" title="GitHub 官方主仓库" style="display: inline-block; color: var(--SmartThemeBodyColor, #fff); background: #24292e; padding: 4px 10px; border-radius: 4px; text-decoration: none; margin-right: 15px; font-size: 0.85em;">
-        <i class="fa-brands fa-github"></i> GitHub 仓库
-      </a>
-      
-      <a href="https://github.com/LieYangZhirun/VarUpdate/tree/main/examples" target="_blank" title="国内无梯子直达备用站" style="display: inline-block; color: #fff; background: #c71d23; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 0.85em;">
-        <i class="fa-solid fa-bolt"></i> Gitee 国内镜像
+      <a href="https://github.com/LieYangZhirun/VarUpdate/tree/main/examples" target="_blank" rel="noopener noreferrer" title="VarUpdate 仓库 · examples 目录" style="display: inline-block; color: var(--SmartThemeBodyColor, #fff); background: #24292e; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 0.85em;">
+        <i class="fa-brands fa-github"></i> GitHub 示例包
       </a>
     </div>
   </div>
@@ -605,6 +600,19 @@ export function registerWandButtons(): void {
   }
 }
 
+/** 与 HTML input 的 min/max 一致，避免 NaN 或越界写入 global */
+function readClampedPanelNumbers(hostDoc: Document): { discardThreshold: number; retentionDepth: number } {
+  let discardThreshold = parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10);
+  if (!Number.isFinite(discardThreshold) || discardThreshold < 0) discardThreshold = 2;
+  if (discardThreshold > 99) discardThreshold = 99;
+
+  let retentionDepth = parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10);
+  if (!Number.isFinite(retentionDepth) || retentionDepth < 1) retentionDepth = 20;
+  if (retentionDepth > 9999) retentionDepth = 9999;
+
+  return { discardThreshold, retentionDepth };
+}
+
 /**
  * 读取面板中的设置值
  */
@@ -615,10 +623,11 @@ export function getPanelSettings(): {
 } {
   try {
     const hostDoc = getHostDocument();
+    const { discardThreshold, retentionDepth } = readClampedPanelNumbers(hostDoc);
     return {
       autoInitialize: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
-      discardThreshold: parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10),
-      retentionDepth: parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10),
+      discardThreshold,
+      retentionDepth,
     };
   } catch {
     return { autoInitialize: true, discardThreshold: 2, retentionDepth: 20 };
@@ -697,25 +706,27 @@ function saveSettings(hostDoc: Document): void {
   try {
     // 使用 updateVariablesWith 保证原子性读-改-写
     const option = { type: 'global' as const };
+    const { discardThreshold, retentionDepth } = readClampedPanelNumbers(hostDoc);
+    const tolInp = hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement;
+    const lifeInp = hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement;
+    if (tolInp) tolInp.value = String(discardThreshold);
+    if (lifeInp) lifeInp.value = String(retentionDepth);
+
+    const cfg = {
+      notifyLevel: notify.getLevel(),
+      autoInitialize: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
+      discardThreshold,
+      retentionDepth,
+    };
+
     if (typeof updateVariablesWith === 'function') {
       updateVariablesWith((globalData) => {
-        globalData[VARUPDATE_CONFIG_KEY] = {
-          notifyLevel: notify.getLevel(),
-          autoInitialize: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
-          discardThreshold: parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10),
-          retentionDepth: parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10),
-        };
+        globalData[VARUPDATE_CONFIG_KEY] = cfg;
         return globalData;
       }, option);
     } else {
-      // fallback：手动读-改-写（updateVariablesWith 不可用时）
       const globalData = readVariables('global');
-      globalData[VARUPDATE_CONFIG_KEY] = {
-        notifyLevel: notify.getLevel(),
-        autoInitialize: (hostDoc.getElementById('varupdate-auto-init') as HTMLInputElement)?.checked ?? true,
-        discardThreshold: parseInt((hostDoc.getElementById('varupdate-tolerance') as HTMLInputElement)?.value || '2', 10),
-        retentionDepth: parseInt((hostDoc.getElementById('varupdate-lifecycle') as HTMLInputElement)?.value || '20', 10),
-      };
+      globalData[VARUPDATE_CONFIG_KEY] = cfg;
       writeVariables('global', globalData);
     }
   } catch { /* 静默 */ }

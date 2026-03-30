@@ -314,8 +314,12 @@ function numericCompare(left: any, op: string, right: any): boolean {
   const r = Number(right);
   if (isNaN(l) || isNaN(r)) return false;
   switch (op) {
-    case '==': return l === r;
-    case '!=': return l !== r;
+    case '==':
+    case '===':
+      return l === r;
+    case '!=':
+    case '!==':
+      return l !== r;
     case '>': return l > r;
     case '>=': return l >= r;
     case '<': return l < r;

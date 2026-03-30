@@ -44,7 +44,7 @@ export function executeInstructions(
   const deduped = deduplicateByPath(instructions);
 
   for (const instruction of deduped) {
-    // 保存快照（浅拷贝关键路径）
+    // 整棵 data 深拷贝快照，单条失败时回滚到此状态
     const snapshot = deepClone(result.data);
 
     try {
@@ -153,7 +153,7 @@ function applyInstruction(instruction: PatchInstruction, data: Record<string, an
 /**
  * 同一路径多条指令时仅保留最后一条（面向用户功能卡 · D-3）。
  *
- * 被合并丢弃的同路径指令以 notice 级提示一次。
+ * 被合并丢弃的同路径指令合并为一条 warning。
  */
 function deduplicateByPath(instructions: PatchInstruction[]): PatchInstruction[] {
   const pathMap = new Map<string, { inst: PatchInstruction; count: number }>();
@@ -173,7 +173,6 @@ function deduplicateByPath(instructions: PatchInstruction[]): PatchInstruction[]
     .map(([path, v]) => `${path} (${v.count}条→保留最后1条)`);
 
   if (duplicated.length > 0) {
-    // D-3 / 基础设施：notice 级提醒（走通知系统，受用户等级控制）
     notify.warning('同路径指令去重', duplicated.join(', '), { category: 'pat' });
   }
 

@@ -24,11 +24,11 @@ import {
   deepClone,
 } from './modules/variable-store.js';
 import * as eventBus from './modules/event-bus.js';
-import { EVENTS } from './modules/event-bus.js';
 import * as notify from './modules/notification.js';
 import { registerMacros } from './modules/macro-engine.js';
 import { renderPanel, registerWandButtons, destroyPanel, refreshDebugState, getPanelSettings } from './modules/ui-panel.js';
 import { registerFilterHooks, unregisterFilterHooks } from './modules/native-filter.js';
+import { sanitizeMessageIndexForWrite } from './shared/message-index.js';
 import { getValueByPath } from './shared/path-utils.js';
 import { mergeDeepWithConflictCheck, MergeConflictError } from './shared/merge-deep-conflict.js';
 import type { ExtractedTag, MessageCompletePayload } from './types/index.js';
@@ -117,6 +117,29 @@ let isAgentsActive = false;
 let lastAgentsMessageCompleteAt = 0;
 
 // ═══════════════════════════════════════════
+//  宿主 / Agents 下标异常时通知（先于 bindEvents）
+// ═══════════════════════════════════════════
+
+/** 与 `message_complete` 一致：`debug` + toastr（受通知等级过滤）；`evt` 为宿主桥接，`life` 为回退类。 */
+function notifyIgnoredInvalidMessageIndex(
+  title: string,
+  raw: unknown,
+  category: 'evt' | 'life' = 'evt',
+  sourceLabel?: string,
+): void {
+  const lead = sourceLabel ? `${sourceLabel}：` : '';
+  if (raw === undefined || raw === null) {
+    notify.debug(title, `${lead}未提供 messageIndex，已忽略`, { category });
+  } else {
+    notify.debug(title, `${lead}messageIndex 无效：${String(raw)}，已忽略`, { category });
+  }
+}
+
+function errorMessageFromUnknown(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+// ═══════════════════════════════════════════
 //  主入口
 // ═══════════════════════════════════════════
 
@@ -146,78 +169,113 @@ async function init(): Promise<void> {
 // ═══════════════════════════════════════════
 
 function bindEvents(): void {
-  eventBus.on(EVENTS.PIPELINE_STARTED, () => { isAgentsActive = true; });
-  eventBus.on(EVENTS.PIPELINE_ENDED, () => { isAgentsActive = false; });
+  eventBus.on(eventBus.EVENTS.PIPELINE_STARTED, () => { isAgentsActive = true; });
+  eventBus.on(eventBus.EVENTS.PIPELINE_ENDED, () => { isAgentsActive = false; });
 
-  eventBus.on(EVENTS.MESSAGE_COMPLETE, (payload: MessageCompletePayload) => {
+  eventBus.on(eventBus.EVENTS.MESSAGE_COMPLETE, (payload: MessageCompletePayload) => {
     if (!payload || typeof payload.content !== 'string') {
       notify.debug('Agents', 'message_complete 负载无效，已忽略', { category: 'msg' });
       return;
     }
     lastAgentsMessageCompleteAt = Date.now();
+    if (payload.writeMode != null && String(payload.writeMode).trim() !== '') {
+      notify.trace('message_complete', `writeMode=${payload.writeMode}`, 'msg');
+    }
+    const rawIdx = payload.messageIndex as unknown;
+    const messageIndex = sanitizeMessageIndexForWrite(rawIdx);
+    if (rawIdx !== undefined && rawIdx !== null && messageIndex === undefined) {
+      notify.debug(
+        'Agents',
+        'message_complete 的 messageIndex 无效，已按最后一楼处理',
+        { category: 'msg' },
+      );
+    }
     void (async () => {
-      await handleMessageContent(payload.content, payload.messageIndex);
+      await handleMessageContent(payload.content, messageIndex);
     })();
   });
 
-  eventBus.on(EVENTS.MESSAGE_RECEIVED, (messageIndex: number, reason?: string) => {
+  eventBus.on(eventBus.EVENTS.MESSAGE_RECEIVED, (messageIndex: number, reason?: string) => {
     if (isAgentsActive) return;
     // 双通道去重：管道标志未及时更新时，仍避免与 `message_complete` 重复处理
     if (Date.now() - lastAgentsMessageCompleteAt < 400) return;
+    const rawIdx = messageIndex as unknown;
+    const idx = sanitizeMessageIndexForWrite(rawIdx);
+    if (idx === undefined) {
+      notifyIgnoredInvalidMessageIndex('宿主新消息', rawIdx);
+      return;
+    }
     try {
       const context = (globalThis as any).SillyTavern?.getContext?.();
-      const message = context?.chat?.[messageIndex];
+      const message = context?.chat?.[idx];
       if (message?.mes) {
         // SillyTavern 在保存角色卡等场景可能再次派发 first_message，与手动初始化去重
         const quiet = reason === 'first_message';
-        void (async () => { await handleMessageContent(message.mes, messageIndex, { quiet }); })();
+        void (async () => { await handleMessageContent(message.mes, idx, { quiet }); })();
+      } else {
+        notify.debug('宿主新消息', `chat[${idx}] 无 mes，已跳过`, { category: 'evt' });
       }
     } catch (e) {
-      notify.error('消息读取失败', (e as Error).message, { category: 'msg' });
+      notify.error('消息读取失败', errorMessageFromUnknown(e), { category: 'msg' });
     }
   });
 
-  eventBus.on(EVENTS.CHAT_CHANGED, async () => {
+  eventBus.on(eventBus.EVENTS.CHAT_CHANGED, async () => {
     isAgentsActive = false;
     clearCache();
     await loadSchema();
     await autoInitGreeting();
   });
 
-  eventBus.on(EVENTS.MESSAGE_EDITED, (messageIndex: number) => {
+  eventBus.on(eventBus.EVENTS.MESSAGE_EDITED, (messageIndex: number) => {
+    const rawIdx = messageIndex as unknown;
+    const idx = sanitizeMessageIndexForWrite(rawIdx);
+    if (idx === undefined) {
+      notifyIgnoredInvalidMessageIndex('宿主消息编辑', rawIdx);
+      return;
+    }
     try {
       const context = (globalThis as any).SillyTavern?.getContext?.();
-      const message = context?.chat?.[messageIndex];
+      const message = context?.chat?.[idx];
       if (message?.mes) {
-        void (async () => { await handleMessageContent(message.mes, messageIndex); })();
+        void (async () => { await handleMessageContent(message.mes, idx); })();
+      } else {
+        notify.debug('宿主消息编辑', `chat[${idx}] 无 mes，已跳过`, { category: 'evt' });
       }
     } catch (e) {
-      notify.error('消息编辑处理失败', (e as Error).message, { category: 'msg' });
+      notify.error('消息编辑处理失败', errorMessageFromUnknown(e), { category: 'msg' });
     }
   });
 
-  eventBus.on(EVENTS.MESSAGE_SWIPED, (messageIndex: number) => {
+  eventBus.on(eventBus.EVENTS.MESSAGE_SWIPED, (messageIndex: number) => {
     // swipe 时不重扫正文：新分支应由生成完成事件更新变量；回退分支应使用已持久化的该 swipe 快照。
     // 此处仅按宿主当前 swipe 读取 message 层，刷新调试视图与面板展示。
+    const rawIdx = messageIndex as unknown;
+    const idx = sanitizeMessageIndexForWrite(rawIdx);
+    if (idx === undefined) {
+      notifyIgnoredInvalidMessageIndex('宿主消息滑动', rawIdx);
+      return;
+    }
     try {
-      const msgVars = readVariables('message', messageIndex);
+      const msgVars = readVariables('message', idx);
       refreshDebugState((msgVars.data ?? {}) as Record<string, any>);
-      notify.debug('消息滑动', `已切换到消息 ${messageIndex} 当前分支的变量快照`, { category: 'msg' });
+      notify.debug('消息滑动', `已切换到消息 ${idx} 当前分支的变量快照`, { category: 'msg' });
     } catch (e) {
-      notify.error('消息滑动处理失败', (e as Error).message, { category: 'msg' });
+      notify.error('消息滑动处理失败', errorMessageFromUnknown(e), { category: 'msg' });
     }
   });
 
   // 负载为删除后的 chat.length（SillyTavern script.js），非被删消息下标
-  eventBus.on(EVENTS.MESSAGE_DELETED, (newChatLength: number) => {
+  eventBus.on(eventBus.EVENTS.MESSAGE_DELETED, (newChatLength: number) => {
     pruneOrphanMessageVariables(newChatLength);
     void autoRecoverIfNeeded();
   });
 
-  eventBus.on(EVENTS.RETRY_REQUESTED, (payload: { messageIndex: number }) => {
-    const n = payload?.messageIndex;
-    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) {
-      notify.debug('变量回退', 'retry_requested 负载缺少有效 messageIndex，已忽略', { category: 'life' });
+  eventBus.on(eventBus.EVENTS.RETRY_REQUESTED, (payload: { messageIndex: number }) => {
+    const rawIdx = payload?.messageIndex as unknown;
+    const n = sanitizeMessageIndexForWrite(rawIdx);
+    if (n === undefined) {
+      notifyIgnoredInvalidMessageIndex('变量回退', rawIdx, 'life', 'retry_requested');
       return;
     }
     clearMessageVariablesAfter(n - 1);
@@ -292,7 +350,7 @@ async function handleMessageContent(
       } else if (e instanceof FormatParseError) {
         notify.error('Var_Initial 解析失败', formatParseErrorDetails(e), { category: 'msg' });
       } else {
-        notify.error('Var_Initial 处理失败', (e as Error).message, { category: 'msg' });
+        notify.error('Var_Initial 处理失败', errorMessageFromUnknown(e), { category: 'msg' });
       }
       initialPipelineOk = false;
     }
@@ -399,7 +457,7 @@ async function applyInitialMergedData(
       notify.success('变量初始化', `${Object.keys(finalData).length} 个顶层变量已初始化`, { category: 'msg' });
     }
 
-    await eventBus.emit(EVENTS.VAR_INITIALIZED, {
+    await eventBus.emit(eventBus.EVENTS.VAR_INITIALIZED, {
       messageIndex: messageIndex ?? -1,
       data: finalData,
     });
@@ -407,7 +465,7 @@ async function applyInitialMergedData(
     refreshDebugState(finalData);
     return true;
   } catch (e) {
-    notify.error('初始化失败', (e as Error).message, { category: 'sch' });
+    notify.error('初始化失败', errorMessageFromUnknown(e), { category: 'sch' });
     return false;
   }
 }
@@ -478,7 +536,7 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
     }
 
     if (!rejectedByThreshold) {
-      await eventBus.emit(EVENTS.VAR_UPDATED, {
+      await eventBus.emit(eventBus.EVENTS.VAR_UPDATED, {
         messageIndex,
         appliedCount: result.appliedCount,
         discardedCount,
@@ -487,6 +545,12 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
 
       if (discardedCount > 0) {
         notify.warning('变量更新', `${result.appliedCount} 条成功，${discardedCount} 条丢弃（≤ 阈值 ${discardThreshold}）`, { category: 'pat' });
+      } else if (result.appliedCount > 0) {
+        notify.success(
+          '变量更新完成',
+          `${result.appliedCount} 条指令执行成功`,
+          { category: 'pat' },
+        );
       }
       refreshDebugState(result.data);
     } else {
@@ -495,7 +559,7 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
         `丢弃 ${discardedCount} 条指令，超过阈值 ${discardThreshold}，本层变量保持原状`,
         { category: 'pat' },
       );
-      await eventBus.emit(EVENTS.VAR_UPDATE_FAILED, {
+      await eventBus.emit(eventBus.EVENTS.VAR_UPDATE_FAILED, {
         messageIndex,
         reason: `丢弃 ${discardedCount} 条指令（超过阈值 ${discardThreshold}）`,
         discardedCount,
@@ -505,10 +569,10 @@ async function handleUpdate(tags: ExtractedTag[], messageIndex?: number): Promis
     }
 
   } catch (e) {
-    notify.error('更新执行失败', (e as Error).message, { category: 'pat' });
-    await eventBus.emit(EVENTS.VAR_UPDATE_FAILED, {
+    notify.error('更新执行失败', errorMessageFromUnknown(e), { category: 'pat' });
+    await eventBus.emit(eventBus.EVENTS.VAR_UPDATE_FAILED, {
       messageIndex,
-      reason: (e as Error).message,
+      reason: errorMessageFromUnknown(e),
       discardedCount: 0,
     });
   }
@@ -697,7 +761,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
         ok = false;
         chatData.schemaStatus = 'error';
         delete chatData.schema;
-        notify.error('世界书 / Schema', (e as Error).message, { category: 'wb' });
+        notify.error('世界书 / Schema', errorMessageFromUnknown(e), { category: 'wb' });
         mergedSchema = null;
       }
     }
@@ -712,12 +776,12 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
 
         tryRegisterMessageLayerVariableSchema(compiled.validator as z.ZodTypeAny);
 
-        await eventBus.emit(EVENTS.VAR_SCHEMA_READY, { defNames: compiled.defNames });
+        await eventBus.emit(eventBus.EVENTS.VAR_SCHEMA_READY, { defNames: compiled.defNames });
       } catch (e) {
         ok = false;
         chatData.schemaStatus = 'error';
         delete chatData.schema;
-        notify.error('Schema 编译失败', (e as Error).message, { category: 'wb' });
+        notify.error('Schema 编译失败', errorMessageFromUnknown(e), { category: 'wb' });
       }
     } else if (schemaTagged.some(t => t.body.trim()) && chatData.schemaStatus !== 'error') {
       // 有条目但正文全空等：不覆盖 compiled，仅保持现状
@@ -752,7 +816,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
         mergedDefault = null;
       } else {
         ok = false;
-        notify.error('世界书 / Default', (e as Error).message, { category: 'wb' });
+        notify.error('世界书 / Default', errorMessageFromUnknown(e), { category: 'wb' });
         mergedDefault = null;
       }
     }
@@ -769,7 +833,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
   } catch (e) {
     ok = false;
     chatData.schemaStatus = 'error';
-    notify.error('世界书加载失败', (e as Error).message, { category: 'wb' });
+    notify.error('世界书加载失败', errorMessageFromUnknown(e), { category: 'wb' });
     writeVariables('chat', chatData);
     return false;
   }
@@ -781,13 +845,13 @@ async function loadSchema(): Promise<void> {
     if (chatData.schema && chatData.schemaStatus === 'compiled') {
       const compiled = compileSchemaFromData(chatData.schema);
       tryRegisterMessageLayerVariableSchema(compiled.validator as z.ZodTypeAny);
-      await eventBus.emit(EVENTS.VAR_SCHEMA_READY, { defNames: compiled.defNames });
+      await eventBus.emit(eventBus.EVENTS.VAR_SCHEMA_READY, { defNames: compiled.defNames });
       return;
     }
     // 含 schemaStatus===compiled 但缺 schema 等异常态，统一走世界书重载
     await loadSchemaAndDefaultFromWorldBook();
   } catch (e) {
-    notify.error('Schema 加载失败', (e as Error).message, { category: 'sch' });
+    notify.error('Schema 加载失败', errorMessageFromUnknown(e), { category: 'sch' });
   }
 }
 
@@ -833,8 +897,8 @@ async function handleReinitFromGreeting(): Promise<void> {
       notify.feedback(false, '开场白初始化', '未找到开场白消息');
     }
   } catch (e) {
-    notify.error('初始化失败', (e as Error).message, { category: 'man' });
-    notify.feedback(false, '开场白初始化', (e as Error).message);
+    notify.error('初始化失败', errorMessageFromUnknown(e), { category: 'man' });
+    notify.feedback(false, '开场白初始化', errorMessageFromUnknown(e));
   }
 }
 
@@ -864,8 +928,8 @@ async function handleReparseFloor(): Promise<void> {
       notify.feedback(false, '重解析', '当前楼层没有可解析的消息正文');
     }
   } catch (e) {
-    notify.error('重解析失败', (e as Error).message, { category: 'man' });
-    notify.feedback(false, '重解析', (e as Error).message);
+    notify.error('重解析失败', errorMessageFromUnknown(e), { category: 'man' });
+    notify.feedback(false, '重解析', errorMessageFromUnknown(e));
   }
 }
 
@@ -889,8 +953,8 @@ function handleSetCheckpoint(): void {
     writeVariables('message', msgVars, lastIndex);
     notify.feedback(true, '检查点', `已将第 ${lastIndex} 层设为检查点`);
   } catch (e) {
-    notify.error('检查点设置失败', (e as Error).message, { category: 'man' });
-    notify.feedback(false, '检查点', (e as Error).message);
+    notify.error('检查点设置失败', errorMessageFromUnknown(e), { category: 'man' });
+    notify.feedback(false, '检查点', errorMessageFromUnknown(e));
   }
 }
 
@@ -929,8 +993,8 @@ async function handleReparseFromCheckpoint(): Promise<void> {
 
     notify.feedback(true, '链式重解析', `已重新解析第 ${startIndex} ~ ${context.chat.length - 1} 层`);
   } catch (e) {
-    notify.error('链式重解析失败', (e as Error).message, { category: 'man' });
-    notify.feedback(false, '链式重解析', (e as Error).message);
+    notify.error('链式重解析失败', errorMessageFromUnknown(e), { category: 'man' });
+    notify.feedback(false, '链式重解析', errorMessageFromUnknown(e));
   }
 }
 

@@ -207,8 +207,11 @@ function alignIndent(output: string, leadingSpaces: number): string {
     .join('\n');
 }
 
+/** 制表符按可视宽度计入缩进（与常见 4 空格 Tab 一致） */
+const TAB_WIDTH = 4;
+
 /**
- * 计算宏所在位置的行首连续空格数
+ * 计算宏所在位置的行首空白宽度（空格 + Tab，遇其它字符则截断并重算）
  */
 function countLeadingSpaces(text: string, offset: number): number {
   let i = offset - 1;
@@ -216,6 +219,8 @@ function countLeadingSpaces(text: string, offset: number): number {
   while (i >= 0 && text[i] !== '\n') {
     if (text[i] === ' ') {
       spaces++;
+    } else if (text[i] === '\t') {
+      spaces += TAB_WIDTH;
     } else {
       spaces = 0;
     }

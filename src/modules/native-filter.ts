@@ -10,7 +10,6 @@
 import { evaluateAllConditions } from './condition-evaluator.js';
 import { readVariables } from './variable-store.js';
 import * as eventBus from './event-bus.js';
-import { EVENTS } from './event-bus.js';
 import * as notify from './notification.js';
 
 // ═══════════════════════════════════════════
@@ -24,10 +23,10 @@ import * as notify from './notification.js';
 export function registerFilterHooks(): void {
   unregisterFilterHooks(); // 防止重复注册
 
-  worldInfoStopper = eventBus.on(EVENTS.WORLDINFO_SCAN_DONE, filterWorldInfoEntries);
-  sendingMessageStopper = eventBus.on(EVENTS.SENDING_MESSAGE, filterSendingMessages);
+  worldInfoStopper = eventBus.on(eventBus.EVENTS.WORLDINFO_SCAN_DONE, filterWorldInfoEntries);
+  sendingMessageStopper = eventBus.on(eventBus.EVENTS.SENDING_MESSAGE, filterSendingMessages);
 
-  notify.debug('过滤 Hook 已注册; 原生过滤器就绪');
+  notify.debug('原生过滤', 'Hook 已注册', { category: 'evt' });
 }
 
 /**
@@ -124,12 +123,16 @@ function filterSendingMessages(data: any): void {
 // ═══════════════════════════════════════════
 
 /**
- * 读取最新一层 message 的 data 字段
+ * 读取最新一层 message 的 data 字段（仅普通对象；数组/原始值视为无变量表，避免条件求值异常）
  */
 function getLatestMessageData(): Record<string, any> {
   try {
     const messageVars = readVariables('message');
-    return messageVars?.data ?? {};
+    const d = messageVars?.data;
+    if (d !== null && typeof d === 'object' && !Array.isArray(d)) {
+      return d as Record<string, any>;
+    }
+    return {};
   } catch {
     return {};
   }

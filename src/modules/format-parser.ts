@@ -68,7 +68,7 @@ export function parseStructuredText(text: string): Record<string, any> {
     const result = JSON.parse(cleaned);
     return wrapIfNotObject(result);
   } catch (e) {
-    errors.jsonError = (e as Error).message;
+    errors.jsonError = catchMessage(e);
   }
 
   // 2. 尝试 TOML
@@ -76,7 +76,7 @@ export function parseStructuredText(text: string): Record<string, any> {
     const result = parseToml(cleaned);
     return wrapIfNotObject(result);
   } catch (e) {
-    errors.tomlError = (e as Error).message;
+    errors.tomlError = catchMessage(e);
   }
 
   // 3. 尝试 YAML（全局 YAML 对象）
@@ -84,7 +84,7 @@ export function parseStructuredText(text: string): Record<string, any> {
     const result = parseYAML(cleaned);
     return wrapIfNotObject(result);
   } catch (e) {
-    errors.yamlError = (e as Error).message;
+    errors.yamlError = catchMessage(e);
   }
 
   throw new FormatParseError('无法解析文本：JSON / TOML / YAML 均失败', errors);
@@ -107,14 +107,14 @@ export function parseStructuredTextSync(text: string): Record<string, any> {
   try {
     return wrapIfNotObject(JSON.parse(cleaned));
   } catch (e) {
-    errors.jsonError = (e as Error).message;
+    errors.jsonError = catchMessage(e);
   }
 
   // 2. 尝试 YAML
   try {
     return wrapIfNotObject(parseYAML(cleaned));
   } catch (e) {
-    errors.yamlError = (e as Error).message;
+    errors.yamlError = catchMessage(e);
   }
 
   throw new FormatParseError('无法解析文本：JSON / YAML 均失败', errors);
@@ -123,6 +123,10 @@ export function parseStructuredTextSync(text: string): Record<string, any> {
 // ═══════════════════════════════════════════
 //  工具函数
 // ═══════════════════════════════════════════
+
+function catchMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
 
 /**
  * YAML 解析封装

@@ -13,12 +13,9 @@
  */
 
 import JSON5 from 'json5';
-
-// ═══════════════════════════════════════════
-//  公开类型
-// ═══════════════════════════════════════════
-
+import { ScriptError } from '../../types/index.js';
 import type { PatchInstruction } from '../../types/index.js';
+
 export type { PatchInstruction };
 
 /**
@@ -28,7 +25,7 @@ export interface ParseResult {
   /** 成功解析的指令数组 */
   instructions: PatchInstruction[];
   /** 被丢弃的条目（含原因） */
-  discarded: Array<{ entry: any; reason: string }>;
+  discarded: Array<{ entry: unknown; reason: string }>;
 }
 
 // ═══════════════════════════════════════════
@@ -359,8 +356,6 @@ function upgradeSingleQuotesInValues(data: any): any {
 // ═══════════════════════════════════════════
 //  错误类
 // ═══════════════════════════════════════════
-
-import { ScriptError } from '../../types/index.js';
 
 /**
  * Patch 解析失败错误

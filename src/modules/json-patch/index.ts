@@ -11,8 +11,11 @@ import { resolvePath } from './path-resolver.js';
 import { executeInstructions } from './executor.js';
 import * as notify from '../notification.js';
 import type { PatchInstruction, UpdateResult } from '../../types/index.js';
-import { bindSafeParseWithContext } from '../schema-compiler/index.js';
-import type { CompiledSchema, ValidationContext } from '../schema-compiler/index.js';
+import {
+  bindSafeParseWithContext,
+  type CompiledSchema,
+  type ValidationContext,
+} from '../schema-compiler/index.js';
 
 // ═══════════════════════════════════════════
 //  公开接口
@@ -110,16 +113,6 @@ export function executeUpdate(
 
   // 合并丢弃记录
   execResult.discarded = [...pathDiscarded, ...execResult.discarded];
-
-  // 通知结果
-  if (execResult.appliedCount > 0) {
-    notify.success(
-      '变量更新完成',
-      `${execResult.appliedCount} 条指令执行成功` +
-      (execResult.discarded.length > 0 ? `，${execResult.discarded.length} 条被丢弃` : ''),
-      { category: 'pat' },
-    );
-  }
 
   return execResult;
 }

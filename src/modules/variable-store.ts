@@ -76,6 +76,8 @@ export function setByPath(layer: StoreLayer, path: string, value: any, messageIn
  */
 export function clearMessageVariablesAfter(messageIndex: number): void {
   try {
+    if (!Number.isFinite(messageIndex) || messageIndex < -1) return;
+
     const context = (globalThis as any).SillyTavern?.getContext?.();
     if (!context?.chat) return;
 
@@ -96,6 +98,8 @@ const ORPHAN_MESSAGE_VAR_SWEEP = 2048;
  */
 export function pruneOrphanMessageVariables(newChatLength: number): void {
   try {
+    if (!Number.isFinite(newChatLength) || newChatLength < 0) return;
+
     const end = newChatLength + ORPHAN_MESSAGE_VAR_SWEEP;
     for (let i = newChatLength; i < end; i++) {
       writeVariables('message', {}, i);

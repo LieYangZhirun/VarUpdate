@@ -1,4 +1,4 @@
-import type { z as ZodGlobal, ZodType, ZodTypeAny } from 'zod';
+import type { z as ZodGlobal } from 'zod';
 
 declare global {
   /**
