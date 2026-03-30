@@ -11,6 +11,7 @@ import { evaluateAllConditions } from './condition-evaluator.js';
 import { readVariables } from './variable-store.js';
 import * as eventBus from './event-bus.js';
 import { EVENTS } from './event-bus.js';
+import * as notify from './notification.js';
 
 // ═══════════════════════════════════════════
 //  公开接口
@@ -26,7 +27,7 @@ export function registerFilterHooks(): void {
   worldInfoStopper = eventBus.on(EVENTS.WORLDINFO_SCAN_DONE, filterWorldInfoEntries);
   sendingMessageStopper = eventBus.on(EVENTS.SENDING_MESSAGE, filterSendingMessages);
 
-  log('过滤 Hook 已注册');
+  notify.debug('过滤 Hook 已注册; 原生过滤器就绪');
 }
 
 /**
@@ -134,8 +135,3 @@ function getLatestMessageData(): Record<string, any> {
   }
 }
 
-function log(msg: string): void {
-  try {
-    console.log(`[VarUpdate][filter] ${msg}`);
-  } catch { /* */ }
-}
