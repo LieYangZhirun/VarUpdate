@@ -82,8 +82,8 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     <p style="margin: 10px 0 2px 0; font-size: 0.9em;"><b>② 其他语法与约束</b></p>
     <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
-        <td style="padding: 4px;"><code>$defs</code> (顶层特定)</td>
-        <td style="padding: 4px;">定义可复用的自定义类型来允许复杂规则，详情见下文示例。</td>
+        <td style="padding: 4px;"><code>$defs</code></td>
+        <td style="padding: 4px;">定义可复用的自定义类型来允许复杂规则，必须位于Schema的最顶部。详情见示例包。</td>
       </tr>
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
         <td style="padding: 4px; width: 33%;"><code>$enum</code></td>
@@ -131,7 +131,7 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
       </tr>
       <tr>
         <td style="padding: 4px;"><code>$hide</code></td>
-        <td style="padding: 4px;">为true时会使该项在范围提取时“隐身”，详情见3.3。</td>
+        <td style="padding: 4px;">为true时会使该节点（及子节点）在使用插值占位符进行范围提取时被忽略。不过若是你直接指定该节点或是该节点的子节点，其依然会被替换为实际值。</td>
       </tr>
     </table>
 
@@ -148,24 +148,19 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
 
     <!-- 综合示例导览框 -->
     <div style="margin-top: 20px; padding: 12px; background: var(--blackA70, rgba(0,0,0,0.1)); border: 1px dashed var(--SmartThemeBorderColor, #ccc); border-radius: 6px; text-align: center;">
-      <p style="margin: 0 0 8px 0; font-size: 0.95em;">📚 <b>查看完整的高阶实景配套示例包</b></p>
+      <p style="margin: 0 0 8px 0; font-size: 0.95em;">📚 <b>查看完整的配套示例包</b></p>
       <div style="font-size: 0.85em; color: var(--SmartThemeHintColor, #ccc); margin-bottom: 10px;">
-        内含 Schema / Default / Initial / Update 的整套现代恋爱/跑团向硬核填空模板
+        一套现代恋爱背景的 Schema / Default / Initial / Update 空模板
       </div>
       
       <!-- 外链导航 -->
-      <a href="https://github.com/YourName/VarUpdate/tree/main/examples" target="_blank" title="GitHub 官方主仓库" style="display: inline-block; color: var(--SmartThemeBodyColor, #fff); background: #24292e; padding: 4px 10px; border-radius: 4px; text-decoration: none; margin-right: 15px; font-size: 0.85em;">
+      <a href="https://github.com/LieYangZhirun/VarUpdate/tree/main/examples" target="_blank" title="GitHub 官方主仓库" style="display: inline-block; color: var(--SmartThemeBodyColor, #fff); background: #24292e; padding: 4px 10px; border-radius: 4px; text-decoration: none; margin-right: 15px; font-size: 0.85em;">
         <i class="fa-brands fa-github"></i> GitHub 仓库
       </a>
       
-      <a href="https://gitee.com/YourName/VarUpdate/tree/main/examples" target="_blank" title="国内无梯子直达备用站" style="display: inline-block; color: #fff; background: #c71d23; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 0.85em;">
+      <a href="https://github.com/LieYangZhirun/VarUpdate/tree/main/examples" target="_blank" title="国内无梯子直达备用站" style="display: inline-block; color: #fff; background: #c71d23; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 0.85em;">
         <i class="fa-solid fa-bolt"></i> Gitee 国内镜像
       </a>
-
-      <!-- 本地回退方案提示 -->
-      <div style="font-size: 0.8em; color: var(--SmartThemeHintColor, #888); margin-top: 10px; border-top: 1px solid var(--blackA70, rgba(0,0,0,0.2)); padding-top: 6px;">
-        💡 提示：若网络受限打不开上方链接，您也可直接在本地打开扩展目录底下的<br><code>./examples/</code> 文件夹，查阅那四份对应的 .txt 实景方案。
-      </div>
     </div>
   </div>
   
@@ -174,16 +169,13 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
 
   <!-- 右列：宏与条件 -->
   <div style="flex: 1;">
-    <h3 style="margin-top: 0; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">3. 插值宏 (给 AI 提取数据)</h3>
+    <h3 style="margin-top: 0; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">3. 插值占位符 (给 AI 提取数据)</h3>
     <p><b>3.1 提取当前变量</b><br>
     你可以在预设、角色卡、世界书的任意位置插入<code>{{message/data/具体路径}}</code>这样的占位符，脚本会自动根据变量路径提取叶子节点的具体值，或范围提取父节点的结构、转化为“PromptalYAML”——一种非常节约Token的提示词专用格式。</p>
 
     <p><b>3.2 获取更新记录</b><br>
     通过 <code>{{message/log}}</code>，你可以将最新楼层的变量更新日志单独提取出来（如 <code>角色/HP: 80 → 75</code>）做单独展示。</p>
     
-    <p><b>3.3 隐藏不需要的节点</b><br>
-    若是某个节点的Schema定义中存在<code>$hide: true</code>的属性定义，那么脚本会在范围提取时忽略该节点（包括其子节点）。不过若是你直接指定该节点或是该节点的子节点，其依然会被替换为实际值。</p>
-
     <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">4. 变量条件标签 (动态开关)</h3>
     <p>把中括号 <code>[]</code> 放在预设名称、世界书备注、正则等名字的两边，<b>只有里面的条件成真时，这条设定才会被设为启用发送</b>。</p>
 
@@ -194,14 +186,14 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
         <th style="padding: 4px; width: 45%;">规则描述</th>
         <th style="padding: 4px; width: 40%;">配置示例</th>
       </tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>==</code> / <code>!=</code></td><td style="padding: 4px;">宽松相等 / 不等</td><td style="padding: 4px;"><code>["地点" == "地牢"]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>===</code> / <code>!==</code></td><td style="padding: 4px;">严格相等 / 严格不等 (要求数据类型一致)</td><td style="padding: 4px;"><code>["HP" === 50]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>&gt;</code> / <code>&lt;=</code> 等</td><td style="padding: 4px;">数值比较</td><td style="padding: 4px;"><code>["HP" &lt; 30]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>∋</code> / <code>∌</code></td><td style="padding: 4px;">数组含 / 不含某个值</td><td style="padding: 4px;"><code>["背包" ∋ "圣水"]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>⊇</code> / <code>!⊇</code></td><td style="padding: 4px;">对象含 / 不含某个键</td><td style="padding: 4px;"><code>["状态" ⊇ "中毒"]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>#</code></td><td style="padding: 4px;">计算长度后再进行比较</td><td style="padding: 4px;"><code>["队伍" # &gt;= 3]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>?</code> / <code>!?</code></td><td style="padding: 4px;">检查变量是否已被创建(已赋过值)</td><td style="padding: 4px;"><code>["圣杯" ?]</code></td></tr>
-      <tr><td style="padding: 4px;"><code>$</code> (比对前)</td><td style="padding: 4px;">用来与另一个动态变量的当前值做比较</td><td style="padding: 4px;"><code>["攻击" &gt; $"敌人/防御"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>==</code> / <code>!=</code></td><td style="padding: 4px;">宽松相等 / 不等</td><td style="padding: 4px;"><code>["地点" == "学校天台"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>===</code> / <code>!==</code></td><td style="padding: 4px;">严格相等 / 严格不等 (要求数据类型一致)</td><td style="padding: 4px;"><code>["好感度" === 50]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>&gt;</code> / <code>&lt;=</code> 等</td><td style="padding: 4px;">数值比较</td><td style="padding: 4px;"><code>["金钱" &lt; 300]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>∋</code> / <code>∌</code></td><td style="padding: 4px;">数组含 / 不含某个值</td><td style="padding: 4px;"><code>["背包" ∋ "草莓牛奶"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>⊇</code> / <code>!⊇</code></td><td style="padding: 4px;">对象含 / 不含某个键</td><td style="padding: 4px;"><code>["状态" ⊇ "心跳加速"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>#</code></td><td style="padding: 4px;">计算长度后再进行比较</td><td style="padding: 4px;"><code>["物品栏" # &lt; 5]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>?</code> / <code>!?</code></td><td style="padding: 4px;">检查变量是否已被创建(已赋过值)</td><td style="padding: 4px;"><code>["情书" ?]</code></td></tr>
+      <tr><td style="padding: 4px;"><code>$</code> (比对前)</td><td style="padding: 4px;">用来与另一个动态变量的当前值做比较</td><td style="padding: 4px;"><code>["本次开销" &gt; $"玩家/金钱"]</code></td></tr>
     </table>
 
     <p style="margin: 15px 0 2px 0; font-size: 0.9em;"><b>② 逻辑运算</b></p>
@@ -211,37 +203,37 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
         <th style="padding: 4px; width: 45%;">规则描述</th>
         <th style="padding: 4px; width: 40%;">配置示例</th>
       </tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">AND (与)</td><td style="padding: 4px;">多个方括号并排连写。全部满足才生效。</td><td style="padding: 4px;"><code>["HP" &lt; 30]["区域" == "野外"]</code></td></tr>
-      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">OR (或)</td><td style="padding: 4px;">在同一个方括号内用 <code>|</code> 隔开，满足其一即可。</td><td style="padding: 4px;"><code>["地点" == "城" | "钱" &gt; 100]</code></td></tr>
-      <tr><td style="padding: 4px;">NOT (非)</td><td style="padding: 4px;">首位加 <code>!</code> 直接反转该条件。</td><td style="padding: 4px;"><code>[!"状态" == "死亡"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">AND (与)</td><td style="padding: 4px;">多个方括号并排连写。全部满足才生效。</td><td style="padding: 4px;"><code>["好感" &gt; 50]["地点" == "天台"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">OR (或)</td><td style="padding: 4px;">在同一个方括号内用 <code>|</code> 隔开，满足其一即可。</td><td style="padding: 4px;"><code>["天气" == "下雨" | "星期" == "周日"]</code></td></tr>
+      <tr><td style="padding: 4px;">NOT (非)</td><td style="padding: 4px;">首位加 <code>!</code> 直接反转该条件。</td><td style="padding: 4px;"><code>[!"情绪" == "愤怒"]</code></td></tr>
     </table>
 
     <p style="margin: 15px 0 2px 0; font-size: 0.9em;"><b>③ 组合具体示例</b></p>
     <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
       <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); background: var(--blackA70, rgba(0,0,0,0.1));">
-        <th style="padding: 4px; width: 33%;">条件标签配置</th>
-        <th style="padding: 4px; width: 22%;">设定的真实标题</th>
-        <th style="padding: 4px; width: 45%;">原理解析</th>
+        <th style="padding: 4px; width: 33%;">条件标签</th>
+        <th style="padding: 4px; width: 22%;">条目标题(语义)</th>
+        <th style="padding: 4px; width: 45%;">规则解读</th>
       </tr>
       <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
-        <td style="padding: 4px;"><code>["地点" == "地牢"]["HP" &lt; 30]</code></td>
-        <td style="padding: 4px;">绝境反击光环</td>
-        <td style="padding: 4px;">AND 组合：在“地牢”区域且血量低于30时才加载此设定。</td>
+        <td style="padding: 4px;"><code>["地点" == "天台"]["好感度" &gt; 20]</code></td>
+        <td style="padding: 4px;">触发特殊午餐事件</td>
+        <td style="padding: 4px;">不仅要在学校“天台”，且对象好感度大于20时才会触发。</td>
       </tr>
       <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
-        <td style="padding: 4px;"><code>["队伍" ∋ "牧师" | "圣杯" ?]</code></td>
-        <td style="padding: 4px;">神圣治疗加成法术</td>
-        <td style="padding: 4px;">OR 组合：队伍包含“牧师”或者已找到“圣杯”即可无缝补给。</td>
+        <td style="padding: 4px;"><code>["物品栏" ∋ "情书" | "星期" == "周五"]</code></td>
+        <td style="padding: 4px;">告白冲动设定</td>
+        <td style="padding: 4px;">只要玩家带着“情书”，或者是恰好碰上容易冲动的“周五”，都会激活该状态设定。</td>
       </tr>
       <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
-        <td style="padding: 4px;"><code>[!"状态" ⊇ "中毒"]["MP" &gt; 10]</code></td>
-        <td style="padding: 4px;">基础冥想回魔</td>
-        <td style="padding: 4px;">综合组合：只要当前状态没“中毒”，且“MP”充足，就可以释放法术。</td>
+        <td style="padding: 4px;"><code>[!"状态" ⊇ "生病"]["金钱" &gt; 100]</code></td>
+        <td style="padding: 4px;">解锁周末约会</td>
+        <td style="padding: 4px;">需要玩家没有“生病”，并且“金钱”足够花销，才会解锁周末约会。</td>
       </tr>
       <tr>
-        <td style="padding: 4px;"><code>["我/速度" &gt; $"敌/速度"]</code></td>
-        <td style="padding: 4px;">先发制人优势</td>
-        <td style="padding: 4px;">双动态变量比对：系统会自动读取并对比二者的具体速度值后判定加载。</td>
+        <td style="padding: 4px;"><code>["陈秋/玩家好感度" &lt;= $"林夏/玩家好感度"]</code></td>
+        <td style="padding: 4px;">陈秋的心态:祝愿</td>
+        <td style="padding: 4px;">实时比较两个变量值，根据人际动态决定角色行为模式。</td>
       </tr>
     </table>
 
