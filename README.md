@@ -154,24 +154,8 @@ VarUpdate 可通过事件总线与 Agents 脚本协作：
 
 VarUpdate 亦可独立运行，通过酒馆原生 `MESSAGE_RECEIVED` 事件接收消息。
 
-## 酒馆助手：为什么 push 了还是旧脚本？
-
-jsDelivr（含 `testingcf.jsdelivr.net`）对 `@main` 的 `bundle.js` 会带 **Cache-Control: max-age=604800**：浏览器**可以把整份脚本缓存 7 天**。  
-仓库里的 [purge 工作流](.github/workflows/sync-jsdelivr.yml) 只刷新 **CDN**，**不会删掉你本机已经缓存的那份**，所以光看 F5 往往「没变化」。
-
-**推荐只改一次助手脚本**：不要用静态的 `import 'https://……'`（地址永远一样 = 一直吃缓存），改用 **动态 import**，URL 后面加**时间戳**，让浏览器当成新文件：
-
-```javascript
-void import(`https://testingcf.jsdelivr.net/gh/LieYangZhirun/VarUpdate@main/dist/bundle.js?${Date.now()}`);
-```
-
-若运行环境支持顶层 `await`，把上一行的 `void import(...)` 改成 `await import(...)` 即可。之后你 **push + 刷新页面** 会重新拉当前 `main` 上的包。代价是**每次刷新都会重新下载** bundle（一般可接受）。若想省流量、允许最多滞后约 1 小时，可把 `Date.now()` 换成 `Math.floor(Date.now() / 3600000)`。
-
-（改源码后仍须 **`npm run build` 并提交 `dist/bundle.js`** 再 push，否则 GitHub 上仍是旧包。）
-
 ## 版本与发布
 
 - **语义化版本**：`package.json` 的 `version` 遵循 [SemVer](https://semver.org/lang/zh-CN/)（`主版本.次版本.修订号`）。对外发布以该字段为准；`dist/bundle.js` 随 `npm run build` 更新后应与之一并提交。
 - **日常操作**：修 bug / 小改进 → 修订号 +1；兼容新功能 → 次版本 +1；不兼容变更 → 主版本 +1。可用 `npm version patch|minor|major`（会改 `package.json` 并打 **git 标签** `v*`，需先提交工作区再执行）。
 - **GitHub Release（可选）**：推送标签后在仓库页 **Releases** 里基于与 `package.json` 一致的标签（如 `v1.0.0`）写说明，便于用户对照下载。
-- **jsDelivr purge（辅助）**：同上工作流在每次 push 到 `main` 时触发；仓库 **Actions** 里也可手动 **Run workflow**。主要减轻 CDN 边缘陈旧，**不能替代**上面的动态 import 解决浏览器 7 天缓存。

@@ -1,6 +1,4 @@
-# 每次 push 到 main 后请求 jsDelivr 刷新 CDN 上 @main 的 bundle（purge.jsdelivr.net）。
-# 注意：jsDelivr 对浏览器下发 max-age=604800（7 天），purge 清不了用户本机已缓存的脚本；
-# 酒馆侧请用「动态 import + ?时间戳」见仓库 README「酒馆助手：为什么 push 了还是旧脚本？」。
+# push 到 main 后 purge jsDelivr 上 @main 的 dist/bundle.js
 name: Purge jsDelivr (@main)
 
 on:
