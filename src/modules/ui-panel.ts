@@ -44,79 +44,223 @@ function getHostDocument(): Document {
 //  帮助弹窗（HTML，供 callGenericPopup / toastr / alert 回退）
 // ═══════════════════════════════════════════
 
-const HELP: Record<string, { title: string; content: string }> = {
+const HELP: Record<string, { title: string; content: string; wide?: boolean; large?: boolean }> = {
   guide: {
-    title: '📖 VarUpdate 使用指南',
-    content: `<b>VarUpdate</b> 是一个结构化变量管理框架，让角色卡能够自动跟踪和维护结构化状态（如 HP、好感度、库存等）。<br><br>
-<b>核心概念：</b><br>
-• <b>格式规则 (Schema)</b> — 在世界书中用 <code>[Var_Schema]</code> 标签定义变量的结构、类型约束和取值范围<br>
-• <b>默认值 (Default)</b> — 在世界书中用 <code>[Var_Default]</code> 标签定义新变量的初始填充值<br>
-• <b>初始化 (Initial)</b> — 在开场白中用 <code>&lt;Var_Initial&gt;</code> 标签设定变量的起始状态<br>
-• <b>增量更新 (Update)</b> — 在消息中用 <code>&lt;Var_Update&gt;</code> 标签以 JSON Patch 格式修改变量<br><br>
-<b>自动执行流程：</b><br>
-1. 聊天开始时 → 加载世界书中的 Schema 和 Default → 编译校验器<br>
-2. 开场白生成时 → 扫描 <code>&lt;Var_Initial&gt;</code> → 建立初始变量<br>
-3. 每条消息生成后 → 若有标签则解析 <code>&lt;Var_Update&gt;</code> / <code>&lt;Var_Initial&gt;</code>；<b>无标签时从前一层继承变量</b>（本层变更记录清空）<br>
-4. Update 指令经宽松解析后逐条校验；失败条回滚，丢弃数超阈值则整次不应用<br><br>
-<b>在提示词中引用变量：</b><br>
-使用 <code>{{message/data/变量路径}}</code> 即可在提示词中插入变量值。例如 <code>{{message/data/角色/HP}}</code> → 80。`,
-  },
-  reloadRules: {
-    title: '🔄 重新加载格式规则',
-    content: `<b>功能：</b>从世界书中重新读取 <code>[Var_Schema]</code>（结构定义）和 <code>[Var_Default]</code>（默认值），重新编译校验器并覆盖当前聊天中缓存的旧规则。<br><br>
-<b>什么时候需要用？</b><br>
-• 你刚修改了世界书中的变量定义（比如新增了一个字段、改了取值范围）<br>
-• 聊天中的变量校验报错，你怀疑是旧 Schema 导致的<br><br>
-<b>注意：</b><br>
-⚠️ 只影响之后的变量校验，不会回溯修改已有楼层的变量值。<br>
-💡 如果需要强制重算，请配合「重新解析当前楼层」或「从检查点逐层重新解析」使用。`,
-  },
-  reinitFromGreeting: {
-    title: '📝 从开场白重新初始化',
-    content: `<b>功能：</b>重新扫描开场白（第 0 层消息）中的 <code>&lt;Var_Initial&gt;</code> 标签，清空并重建初始变量。<br><br>
-<b>什么时候需要用？</b><br>
-• 你手动编辑了开场白中的初始变量值<br>
-• 初始化时出了错，想重新执行一遍<br><br>
-<b>注意：</b><br>
-⚠️ 会清空第 0 层已有的变量数据并重新写入。<br>
-💡 不影响后续楼层的变量，若需全量修复请配合「从检查点逐层重新解析」。`,
-  },
-  reparseFloor: {
-    title: '🔁 重新解析当前楼层',
-    content: `<b>功能：</b>清除当前最新楼层的变量数据，对该楼层的消息内容重新进行标签扫描和变量更新。<br><br>
-<b>什么时候需要用？</b><br>
-• 手动编辑了最新一条消息中的 <code>&lt;Var_Update&gt;</code> 标签<br>
-• 怀疑变量状态不正确，想手动重跑一遍<br>
-• AI 输出了截断的标签，你补全后需要重新解析<br><br>
-💡 只对最新一层生效。如果需要修复多层，请使用「从检查点逐层重新解析」。`,
-  },
-  setCheckpoint: {
-    title: '📌 将当前楼层设为检查点',
-    content: `<b>功能：</b>将当前最新楼层标记为「检查点」，该楼层的变量数据在自动清理时会被保留。<br><br>
-<b>什么时候需要用？</b><br>
-• 对话到达了一个关键节点（如战斗开始、场景切换、重要分支）<br>
-• 需要一个「存档点」以便后续回退和修复<br><br>
-<b>工作原理：</b><br>
-• 检查点是「链式重解析」的起点——从检查点开始逐层重算，恢复完整变量链<br>
-• 变量清理策略会跳过检查点楼层，确保锚点数据不丢失<br><br>
-💡 建议在每个重要剧情节点设置一个检查点，类似游戏存档。`,
-  },
-  reparseFromCheckpoint: {
-    title: '⏩ 从检查点逐层重新解析',
-    content: `<b>功能：</b>找到最近的检查点楼层，从该检查点的下一层开始，依次对后续每一层重新执行标签扫描和变量更新。<br><br>
-<b>什么时候需要用？</b><br>
-• 发现多个楼层的变量都不对，需要从一个已知正确的状态全量修复<br>
-• 手动编辑了中间楼层的消息，需要重算后续影响<br><br>
-<b>工作原理：</b><br>
-1. 向前搜索最近的检查点楼层<br>
-2. 从检查点的下一层开始，逐层重新解析<br>
-3. 如果找不到检查点，则从第 0 层开始重算所有楼层<br><br>
-⚠️ <b>操作不可撤销！</b>会覆盖检查点之后所有楼层的变量数据。<br>
-💡 在执行前建议先确认检查点的位置是否正确。`,
+    title: '📖 变量系统使用指南',
+    wide: true,
+    large: true,
+    content: `<div style="display: flex; flex-direction: row; gap: 20px; text-align: left; line-height: 1.6; font-size: 0.95em; max-height: 85vh; overflow-y: auto; padding-right: 5px;">
+  
+  <!-- 左列：世界书与消息指令 -->
+  <div style="flex: 1;">
+    <h3 style="margin-top: 0; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">1. 世界书声明 (基础设置)</h3>
+    无论是 Schema 还是 Default，均支持 JSON、YAML、TOML 三种格式的解析。<span style="color:var(--SmartThemeHintColor, #888);">为了防止污染提示词，请在世界书管理界面将其设为“禁用”，脚本解析仍能够解析。</span><br>
+
+    <p><b>1.1 格式定义 [Var_Schema]</b><br>
+    在世界书的条目标题中加入 <code>[Var_Schema]</code>标签，使用专有语法定义变量的结构和校验规则。脚本会自动将其编译为 Zod 代码执行。</p>
+    
+    <p style="margin: 5px 0 2px 0; font-size: 0.9em;"><b>① 支持的类型 ($type)</b></p>
+    <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px; width: 33%;"><code>string</code> / <code>number</code> / <code>integer</code> / <code>boolean</code></td>
+        <td style="padding: 4px;">基础的文本、数值、整数、布尔值。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>string/number/integer</code> + <code>(force)</code></td>
+        <td style="padding: 4px;">可在常见输出偏差（如数字被写成字符串，或输出为违规小数）下仍尽量通过校验并归一化为目标类型。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>object</code></td>
+        <td style="padding: 4px;">固定结构对象，大部分父节点均为此类，允许在内部逐一定义子节点。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>array&lt;type&gt;</code> / <code>record&lt;type&gt;</code></td>
+        <td style="padding: 4px;">数组容器与字典容器，其中 <code>type</code> 为存放的元素类型（例如 <code>array&lt;string&gt;</code>）。</td>
+      </tr>
+    </table>
+
+    <p style="margin: 10px 0 2px 0; font-size: 0.9em;"><b>② 其他语法与约束</b></p>
+    <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>$defs</code> (顶层特定)</td>
+        <td style="padding: 4px;">定义可复用的自定义类型来允许复杂规则，详情见下文示例。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px; width: 33%;"><code>$enum</code></td>
+        <td style="padding: 4px;">控制string的范围边界，可与通配符规则配合（见附录）。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>$min</code> / <code>$max</code></td>
+        <td style="padding: 4px;">控制number或integer的范围边界。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>$minLength</code> / <code>$maxLength</code></td>
+        <td style="padding: 4px;">控制string的文本字符长度上下限。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>$minItems</code> / <code>$maxItems</code></td>
+        <td style="padding: 4px;">控制array或record的元素数量上限。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>$regex</code></td>
+        <td style="padding: 4px;">利用正则表达式强制约束string的格式规范。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>$key_rule</code></td>
+        <td style="padding: 4px;">record专属规则，允许作为父项容纳其他子规则节点，并将这些规则作用于record的键名。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>$either</code></td>
+        <td style="padding: 4px;">通用父项规则节点，其下以数组形式容纳多组子规则，满足任意一组即通过校验。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>$optional</code></td>
+        <td style="padding: 4px;">为true时允许该属性被置空（可以处于缺失状态不去校验）。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>$default</code></td>
+        <td style="padding: 4px;">当数据缺失时，自动为该属性赋予一个安全的默认底值。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>refer(...)</code></td>
+        <td style="padding: 4px;">引用另一变量当前真实值作约束（如 <code>$max: refer(HP上限)</code>）。</td>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>$extensible</code></td>
+        <td style="padding: 4px;">为true时允许该对象额外新增未经定义的新增项。</td>
+      </tr>
+      <tr>
+        <td style="padding: 4px;"><code>$hide</code></td>
+        <td style="padding: 4px;">为true时会使该项在范围提取时“隐身”，详情见3.3。</td>
+      </tr>
+    </table>
+
+    <p style="margin-top: 15px;"><b>1.2 默认底值 [Var_Default]</b><br>
+    在世界书的条目标题中加入 <code>[Var_Default]</code>标签。此处定义的默认值会覆盖 Schema 中的 $default，便于集中定义和整理。当 <code>&lt;Var_Initial&gt;</code> 定义的初始变量有遗漏时，系统会自动用这里的数据进行补齐。</p>
+
+    <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">2. 消息流指令 (AI 或玩家输出)</h3>
+
+    <p><b>2.1 初始化 &lt;Var_Initial&gt;</b><br>
+    用于在开场白设置或在故事中重置剧情状态。它会<b>完全清空当前的变量</b>，根据解析结果重新建立初始状态。<span style="color:var(--SmartThemeHintColor, #888);">同样支持JSON、YAML、TOML三种格式。</span></p>
+
+    <p><b>2.2 动态更新 &lt;Var_Update&gt;</b><br>
+    在普通的聊天对话里输出，用来<b>修改现有的变量</b>。须遵循JSON Patch规范，支持替换（<code>replace</code>）、新增（<code>insert</code>，路径末尾写 <code>/-</code> 代表加到数组末尾）、删除（<code>delete</code>）三种操作。</p>
+
+    <!-- 综合示例导览框 -->
+    <div style="margin-top: 20px; padding: 12px; background: var(--blackA70, rgba(0,0,0,0.1)); border: 1px dashed var(--SmartThemeBorderColor, #ccc); border-radius: 6px; text-align: center;">
+      <p style="margin: 0 0 8px 0; font-size: 0.95em;">📚 <b>查看完整的高阶实景配套示例包</b></p>
+      <div style="font-size: 0.85em; color: var(--SmartThemeHintColor, #ccc); margin-bottom: 10px;">
+        内含 Schema / Default / Initial / Update 的整套现代恋爱/跑团向硬核填空模板
+      </div>
+      
+      <!-- 外链导航 -->
+      <a href="https://github.com/YourName/VarUpdate/tree/main/examples" target="_blank" title="GitHub 官方主仓库" style="display: inline-block; color: var(--SmartThemeBodyColor, #fff); background: #24292e; padding: 4px 10px; border-radius: 4px; text-decoration: none; margin-right: 15px; font-size: 0.85em;">
+        <i class="fa-brands fa-github"></i> GitHub 仓库
+      </a>
+      
+      <a href="https://gitee.com/YourName/VarUpdate/tree/main/examples" target="_blank" title="国内无梯子直达备用站" style="display: inline-block; color: #fff; background: #c71d23; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 0.85em;">
+        <i class="fa-solid fa-bolt"></i> Gitee 国内镜像
+      </a>
+
+      <!-- 本地回退方案提示 -->
+      <div style="font-size: 0.8em; color: var(--SmartThemeHintColor, #888); margin-top: 10px; border-top: 1px solid var(--blackA70, rgba(0,0,0,0.2)); padding-top: 6px;">
+        💡 提示：若网络受限打不开上方链接，您也可直接在本地打开扩展目录底下的<br><code>./examples/</code> 文件夹，查阅那四份对应的 .txt 实景方案。
+      </div>
+    </div>
+  </div>
+  
+  <!-- 中间分割线 -->
+  <div style="width: 1px; background: var(--SmartThemeBorderColor, #ccc); flex-shrink: 0;"></div>
+
+  <!-- 右列：宏与条件 -->
+  <div style="flex: 1;">
+    <h3 style="margin-top: 0; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">3. 插值宏 (给 AI 提取数据)</h3>
+    <p><b>3.1 提取当前变量</b><br>
+    你可以在预设、角色卡、世界书的任意位置插入<code>{{message/data/具体路径}}</code>这样的占位符，脚本会自动根据变量路径提取叶子节点的具体值，或范围提取父节点的结构、转化为“PromptalYAML”——一种非常节约Token的提示词专用格式。</p>
+
+    <p><b>3.2 获取更新记录</b><br>
+    通过 <code>{{message/log}}</code>，你可以将最新楼层的变量更新日志单独提取出来（如 <code>角色/HP: 80 → 75</code>）做单独展示。</p>
+    
+    <p><b>3.3 隐藏不需要的节点</b><br>
+    若是某个节点的Schema定义中存在<code>$hide: true</code>的属性定义，那么脚本会在范围提取时忽略该节点（包括其子节点）。不过若是你直接指定该节点或是该节点的子节点，其依然会被替换为实际值。</p>
+
+    <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">4. 变量条件标签 (动态开关)</h3>
+    <p>把中括号 <code>[]</code> 放在预设名称、世界书备注、正则等名字的两边，<b>只有里面的条件成真时，这条设定才会被设为启用发送</b>。</p>
+
+    <p style="margin: 5px 0 2px 0; font-size: 0.9em;"><b>① 值运算</b> <span style="color:var(--SmartThemeHintColor, #888);">（支持附录中的通配符规则）</span></p>
+    <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); background: var(--blackA70, rgba(0,0,0,0.1));">
+        <th style="padding: 4px; width: 15%;">运算符</th>
+        <th style="padding: 4px; width: 45%;">规则描述</th>
+        <th style="padding: 4px; width: 40%;">配置示例</th>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>==</code> / <code>!=</code></td><td style="padding: 4px;">宽松相等 / 不等</td><td style="padding: 4px;"><code>["地点" == "地牢"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>===</code> / <code>!==</code></td><td style="padding: 4px;">严格相等 / 严格不等 (要求数据类型一致)</td><td style="padding: 4px;"><code>["HP" === 50]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>&gt;</code> / <code>&lt;=</code> 等</td><td style="padding: 4px;">数值比较</td><td style="padding: 4px;"><code>["HP" &lt; 30]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>∋</code> / <code>∌</code></td><td style="padding: 4px;">数组含 / 不含某个值</td><td style="padding: 4px;"><code>["背包" ∋ "圣水"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>⊇</code> / <code>!⊇</code></td><td style="padding: 4px;">对象含 / 不含某个键</td><td style="padding: 4px;"><code>["状态" ⊇ "中毒"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>#</code></td><td style="padding: 4px;">计算长度后再进行比较</td><td style="padding: 4px;"><code>["队伍" # &gt;= 3]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;"><code>?</code> / <code>!?</code></td><td style="padding: 4px;">检查变量是否已被创建(已赋过值)</td><td style="padding: 4px;"><code>["圣杯" ?]</code></td></tr>
+      <tr><td style="padding: 4px;"><code>$</code> (比对前)</td><td style="padding: 4px;">用来与另一个动态变量的当前值做比较</td><td style="padding: 4px;"><code>["攻击" &gt; $"敌人/防御"]</code></td></tr>
+    </table>
+
+    <p style="margin: 15px 0 2px 0; font-size: 0.9em;"><b>② 逻辑运算</b></p>
+    <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); background: var(--blackA70, rgba(0,0,0,0.1));">
+        <th style="padding: 4px; width: 15%;">运算符</th>
+        <th style="padding: 4px; width: 45%;">规则描述</th>
+        <th style="padding: 4px; width: 40%;">配置示例</th>
+      </tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">AND (与)</td><td style="padding: 4px;">多个方括号并排连写。全部满足才生效。</td><td style="padding: 4px;"><code>["HP" &lt; 30]["区域" == "野外"]</code></td></tr>
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc);"><td style="padding: 4px;">OR (或)</td><td style="padding: 4px;">在同一个方括号内用 <code>|</code> 隔开，满足其一即可。</td><td style="padding: 4px;"><code>["地点" == "城" | "钱" &gt; 100]</code></td></tr>
+      <tr><td style="padding: 4px;">NOT (非)</td><td style="padding: 4px;">首位加 <code>!</code> 直接反转该条件。</td><td style="padding: 4px;"><code>[!"状态" == "死亡"]</code></td></tr>
+    </table>
+
+    <p style="margin: 15px 0 2px 0; font-size: 0.9em;"><b>③ 组合具体示例</b></p>
+    <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
+      <tr style="border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); background: var(--blackA70, rgba(0,0,0,0.1));">
+        <th style="padding: 4px; width: 33%;">条件标签配置</th>
+        <th style="padding: 4px; width: 22%;">设定的真实标题</th>
+        <th style="padding: 4px; width: 45%;">原理解析</th>
+      </tr>
+      <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>["地点" == "地牢"]["HP" &lt; 30]</code></td>
+        <td style="padding: 4px;">绝境反击光环</td>
+        <td style="padding: 4px;">AND 组合：在“地牢”区域且血量低于30时才加载此设定。</td>
+      </tr>
+      <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>["队伍" ∋ "牧师" | "圣杯" ?]</code></td>
+        <td style="padding: 4px;">神圣治疗加成法术</td>
+        <td style="padding: 4px;">OR 组合：队伍包含“牧师”或者已找到“圣杯”即可无缝补给。</td>
+      </tr>
+      <tr style="border-bottom: 1px dashed var(--SmartThemeBorderColor, #ccc);">
+        <td style="padding: 4px;"><code>[!"状态" ⊇ "中毒"]["MP" &gt; 10]</code></td>
+        <td style="padding: 4px;">基础冥想回魔</td>
+        <td style="padding: 4px;">综合组合：只要当前状态没“中毒”，且“MP”充足，就可以释放法术。</td>
+      </tr>
+      <tr>
+        <td style="padding: 4px;"><code>["我/速度" &gt; $"敌/速度"]</code></td>
+        <td style="padding: 4px;">先发制人优势</td>
+        <td style="padding: 4px;">双动态变量比对：系统会自动读取并对比二者的具体速度值后判定加载。</td>
+      </tr>
+    </table>
+
+    <!-- 附录：通配符 -->
+    <div style="margin-top: 25px; padding: 10px; border-radius: 6px; background: var(--blackA70, rgba(0,0,0,0.1)); border: 1px dashed var(--SmartThemeBorderColor, #ccc);">
+      <h4 style="margin: 0 0 6px 0; font-size: 0.95em;">附录：通配符 <code>*</code></h4>
+      <p style="margin: 0; font-size: 0.85em; color: var(--SmartThemeHintColor, #888);">
+      可用于条件标签内的所有包含/配对运算中，也可以用于 Schema 里的 <code>$enum</code> 等文本比对约束里。<br>
+      • **数字匹配**：<code>1~2</code>个星号代表严格的一字一配。<code>3</code>个及其以上的星号(如 <code>***</code>)可以忽略前导或后随长度，匹配任意长的内容。
+      • **位置匹配**：<code>*</code>号可以出现在字符串的开头、结尾或中间，表示该位置可以匹配任意字符序列。
+      • **示例**：<code>["地点" == "***森林***"]</code> 可匹配出“大森林内部”。
+      </p>
+    </div>
+  </div>
+</div>`,
   },
   notifyLevel: {
     title: '🔔 通知等级',
-    content: `控制 VarUpdate 弹出通知（toastr）和控制台日志的信息级别：<br><br>
+    content: `控制变量系统弹出通知（toastr）和控制台日志的信息级别：<br><br>
 <table style="width:100%; border-collapse:collapse;">
 <tr><td style="padding:4px;"><b>debug</b></td><td style="padding:4px;">显示所有信息：调试细节 + 成功 + 警告 + 错误</td></tr>
 <tr><td style="padding:4px;"><b>always</b></td><td style="padding:4px;">显示操作结果：成功 + 警告 + 错误</td></tr>
@@ -136,25 +280,25 @@ const HELP: Record<string, { title: string; content: string }> = {
   },
   toleranceThreshold: {
     title: '🎯 容错阈值',
-    content: `控制一次变量更新中「可接受的丢弃指令数」：<br><br>
-当 AI 输出的 <code>&lt;Var_Update&gt;</code> 中有部分指令因校验失败被丢弃时：<br>
-• 丢弃数 <b>≤ 阈值</b> → 视为<b>警告</b>：变量正常更新，但会通知你检查<br>
-• 丢弃数 <b>&gt; 阈值</b> → 视为<b>失败</b>：广播失败事件，可触发 Agents 自动重试<br><br>
+    content: `与Agents系统配合使用，根据一次变量更新中的「无效指令数」决定是否自动重试：<br><br>
+当 AI 输出的 <code>&lt;Var_Update&gt;</code> 中有部分指令无效时：<br>
+• 无效数 <b>≤ 阈值</b> → 视为<b>警告</b>：变量正常更新，但会通知你检查<br>
+• 无效数 <b>&gt; 阈值</b> → 视为<b>失败</b>：广播失败事件，可触发 Agents 自动重试<br><br>
 <b>建议值：</b><br>
 • <b>2</b>（默认）— 适合大多数场景，容忍少量格式错误<br>
-• <b>0</b> — 严格模式，任何指令丢弃都视为失败<br>
+• <b>0</b> — 严格模式，任何指令无效都视为失败<br>
 • <b>5+</b> — 宽松模式，适合变量字段多、AI 容易犯错的场景`,
   },
   varLifecycle: {
     title: '📦 楼层变量生命周期',
     content: `控制保留最近多少层消息的完整变量数据：<br><br>
-• 超出范围的旧楼层变量会被自动清理，以控制聊天文件体积<br>
+• 超出范围的旧楼层变量会被自动清理，以控制内存占用<br>
 • 被标记为<b>检查点</b>的楼层<b>始终保留</b>，不受清理影响<br>
 • 清理只删除变量数据，<b>不影响消息内容</b><br><br>
 <b>建议值：</b><br>
 • <b>20</b>（默认）— 适合大多数场景<br>
 • <b>50+</b> — 如果你经常回看历史变量<br>
-• <b>9999</b> — 几乎不清理（注意文件体积）`,
+• <b>9999</b> — 几乎不清理（会很卡）`,
   },
 };
 
@@ -166,7 +310,7 @@ function showHelp(key: string): void {
     const ST = (globalThis as any).SillyTavern;
     if (ST?.callGenericPopup) {
       ST.callGenericPopup(h.content, ST.POPUP_TYPE.TEXT, '', {
-        wide: false, large: false, okButton: '了解', cancelButton: false,
+        wide: h.wide ?? false, large: h.large ?? false, okButton: '了解', cancelButton: false,
       });
       return;
     }
@@ -257,31 +401,31 @@ const PANEL_CSS = `
 const PANEL_HTML = `
 <div id="varupdate-settings" class="inline-drawer">
   <div class="inline-drawer-toggle inline-drawer-header">
-    <b>变量更新系统</b>
+    <b>变量系统</b>
     <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
   </div>
   <div class="inline-drawer-content">
 
     <!-- 顶部快捷按钮区 -->
     <div class="varupdate-button-grid">
-      <div class="varupdate-btn" id="varupdate-btn-reload" title="从世界书重新读取并编译 [Var_Schema] 和 [Var_Default]，覆盖当前聊天中的旧规则">
+      <div class="varupdate-btn" id="varupdate-btn-reload" title="功能：从世界书重新读取并编译格式规则，覆盖旧规则。&#10;适用：当你刚修改了字段格式又遇到校验报错时。&#10;注意：不影响任何已有历史楼层。">
         <i class="fa-solid fa-arrows-rotate"></i> 重新加载格式规则
       </div>
-      <div class="varupdate-btn" id="varupdate-btn-reinit" title="重新扫描开场白（第0层）中的 <Var_Initial> 标签，清空并重建初始变量">
+      <div class="varupdate-btn" id="varupdate-btn-reinit" title="功能：重新扫描开场白中的 <Var_Initial> 标签。&#10;适用：你手动修改了开场白变量或初始化失败想重启时。&#10;注意：仅清空开场白并重建，不影响中间楼层更新。">
         <i class="fa-solid fa-file-import"></i> 从开场白重新初始化
       </div>
-      <div class="varupdate-btn" id="varupdate-btn-reparse" title="清除最新楼层的变量数据，重新扫描该层消息中的标签并执行更新">
+      <div class="varupdate-btn" id="varupdate-btn-reparse" title="功能：清除最新楼层的变量数据，对该层重新扫描标签并更新。&#10;适用：你刚手动编辑了最新消息中的标签，想让它生效。&#10;注意：仅能处理最高一层的单层错误。">
         <i class="fa-solid fa-rotate-right"></i> 重新解析当前楼层
       </div>
-      <div class="varupdate-btn" id="varupdate-btn-checkpoint" title="将最新楼层标记为检查点，变量清理时会保留该层数据，可作为链式重解析的起点">
+      <div class="varupdate-btn" id="varupdate-btn-checkpoint" title="功能：将当前最新楼层永久标记为“检查点”。&#10;适用：到达关键剧情节点，将其标记为存档锚点。&#10;原理：存档锚点永远免受生命周期清理，且可作链式修复的起点。">
         <i class="fa-solid fa-camera"></i> 将当前楼层设为检查点
       </div>
-      <div class="varupdate-btn" id="varupdate-btn-reparse-chain" title="从最近的检查点开始，逐层重新扫描标签并重算变量，修复检查点之后的整条变量链">
+      <div class="varupdate-btn" id="varupdate-btn-reparse-chain" title="功能：从最近的检查点向下逐一重跑所有楼层的变量更新。&#10;适用：变量全乱了，需要基于锚点进行覆盖性重算修复。">
         <i class="fa-solid fa-play"></i> 从检查点逐层重新解析
       </div>
     </div>
 
-    <div class="varupdate-btn" id="varupdate-btn-guide" title="查看 VarUpdate 的完整使用说明" style="margin-bottom:10px;">
+    <div class="varupdate-btn" id="varupdate-btn-guide" title="查看变量系统的完整使用说明" style="margin-bottom:10px;">
       <i class="fa-solid fa-book-open"></i> 使用指南
     </div>
 

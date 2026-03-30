@@ -1,0 +1,20 @@
+```json
+<Var_Update>
+[
+  { "op": "delete", "path": "/玩家/状态标记/开学第一天" },
+  { "op": "replace", "path": "/当前时间/24H", "value": "12:15" },
+  { "op": "replace", "path": "/当前位置", "value": "学校天台" },
+  { "op": "replace", "path": "/当前天气", "value": "微风" },
+  { "op": "replace", "path": "/人物列表/林夏/当前情绪", "value": "开心" },
+  { "op": "replace", "path": "/人物列表/林夏/玩家好感度", "value": 15 },
+  { "op": "insert", "path": "/玩家/物品栏/-", "value": { 
+      "名称": "半盒草莓牛奶", 
+      "描述": "带着些许手心余温的盒装饮料", 
+      "来源": "林夏赠送" 
+  }},
+  { "op": "replace", "path": "/玩家/持有金钱", "value": 485 },
+  { "op": "insert", "path": "/玩家/状态标记/心跳加速", "value": true },
+  { "op": "insert", "path": "/记忆日志/Day 1 午休", "value": "玩家在天台与林夏共进午餐，林夏主动递给玩家一盒草莓牛奶。" }
+]
+</Var_Update>
+```

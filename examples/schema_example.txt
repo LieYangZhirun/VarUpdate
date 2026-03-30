@@ -1,0 +1,120 @@
+```yaml
+$defs:
+  角色:
+    $type: object
+    姓名:
+      $type: string
+      $minLength: 1
+      $maxLength: 20
+    性别:
+      $type: string
+      $enum: ["男", "女", "其他", "保密*"]
+      $default: "未知"
+    职业:
+      $type: string
+      $optional: true
+    年龄:
+      $type: integer(force)
+      $min: 0
+      $max: 5000
+    类型:
+      $type: string
+      $enum: ["玩家角色", "浪漫对象", "重要配角", "路人*"]
+    背景信息:
+      $type: string
+      $maxLength: 500
+      $optional: true
+    性格描述:
+      $type: string
+      $maxLength: 100
+      $default: "暂无"
+    当前情绪:
+      $type: string
+      $default: "平静"
+    玩家好感度:
+      $type: number(force)
+      $min: -100
+      $max: 100
+      $default: 0
+
+  物品:
+    $type: object
+    名称:
+      $type: string
+      $minLength: 1
+      $maxLength: 30
+    描述:
+      $type: string
+      $maxLength: 200
+    来源:
+      $type: string
+      $optional: true
+      $default: "未知来源"
+
+# 这里没写 $type: object，靠隐式推断也可以！
+当前时间:
+  年:
+    $type: string(force)
+  月:
+    $type: string(force)
+  日:
+    $type: string(force)
+  24H:
+    $type: string(force)
+    # 展示 $regex 正则：限制时间格式为 HH:MM
+    $regex: "^([01]?\\d|2[0-3]):[0-5]\\d$"
+  星期:
+    $type: string(force)
+    $enum: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
+当前天气:
+  $type: string
+  $enum: ["晴*", "阴*", "雨*", "雪*", "风*", "异常天候*"]
+  $default: "晴朗"
+
+当前位置:
+  $type: string
+  $maxLength: 50
+  $default: "迷雾之中"
+
+人物列表:
+  $type: record<角色>
+  # 限制最多追踪 20 个人物，避免上下文爆炸
+  $maxItems: 20
+  # 展示 $key_rule：要求录入的人名（键名）长度在 1-20 之间
+  $key_rule:
+    $minLength: 1
+    $maxLength: 20
+
+玩家:
+  $type: object
+  背包容量上限:
+    $type: integer
+    $min: 1
+    $max: 999
+    $default: 20
+    # 展示hide用法：通常情况下我们不需要把这个变量展示给AI
+    $hide: true
+  持有金钱:
+    $type: number
+    $min: 0
+    $default: 1000
+  物品栏:
+    $type: array<物品>
+    # 展示 refer 动态引用：物品数量上限受到上述设定的“背包容量上限”约束！
+    $maxItems: refer(/玩家/背包容量上限)
+  状态标记:
+    $type: object
+    # 展示 $extensible：允许 AI 随便往这里自由插入奇怪的键值对，比如 { "住院中": true }，系统不会因 Schema 没预设而报错
+    $extensible: true
+    $default: {}
+
+记忆日志:
+  $type: record<string>
+  $maxItems: 50
+  # 展示 $key_rule 与 $either 的父节点嵌套：日志的字典键名只能是 "Day X" 或者 "YYYY-MM-DD" 的正规日期结构
+  $key_rule:
+    $either:
+      - $regex: "^\\d{4}-\\d{2}-\\d{2}$"
+      - $regex: "^Day\\s*\\d+$"
+```

@@ -121,7 +121,7 @@ let lastAgentsMessageCompleteAt = 0;
 // ═══════════════════════════════════════════
 
 async function init(): Promise<void> {
-  notify.debug('初始化', 'VarUpdate 脚本开始加载', { category: 'boot' });
+  notify.debug('初始化', '变量系统 开始加载', { category: 'boot' });
 
   renderPanel({
     onReloadRules: handleReloadRules,
@@ -138,7 +138,7 @@ async function init(): Promise<void> {
   await loadSchema();
 
   await autoInitGreeting();
-  notify.success('初始化完成', 'VarUpdate 已就绪', { category: 'boot' });
+  notify.success('初始化完成', '变量系统 已就绪', { category: 'boot' });
 }
 
 // ═══════════════════════════════════════════
@@ -946,7 +946,7 @@ function cleanup(): void {
   unregisterFilterHooks();
   unregisterMacros?.();
   eventBus.removeAll();
-  notify.debug('卸载', 'VarUpdate 脚本已卸载', { category: 'boot' });
+  notify.debug('卸载', '变量系统 已卸载', { category: 'boot' });
 }
 
 // ═══════════════════════════════════════════

@@ -255,7 +255,7 @@ function applyConstraints(baseType: z.ZodType<any>, node: Record<string, any>, p
         t = wrapNegate(applyRegex(t, value, path), isNegated);
         break;
       case '$key_rule':
-        t = applyKeyRule(t, value);
+        t = applyKeyRule(t, value, path);
         break;
       case '$either':
         // S2: OR 逻辑
@@ -358,22 +358,26 @@ function applyRegex(t: z.ZodType<any>, pattern: string, path: string): z.ZodType
   }
 }
 
-function applyKeyRule(t: z.ZodType<any>, rule: any): z.ZodType<any> {
+function applyKeyRule(t: z.ZodType<any>, rule: any, path: string): z.ZodType<any> {
+  if (typeof rule !== 'object' || rule === null) return t;
+
+  // 将 $key_rule 下的所有子属性当作一套约束集，编译出一个 z.string() 校验器
+  // 然后用这个校验器去 refine 字典的每一个键名
+  let keyValidator: z.ZodType<any> = z.string();
+  const ruleNode: Record<string, any> = { $type: 'string', ...rule };
+  try {
+    keyValidator = applyConstraints(z.string(), ruleNode, `${path}/$key_rule`);
+  } catch {
+    // 编译失败时退回无约束
+    return t;
+  }
+
   return t.refine(
     (val: any) => {
       if (typeof val !== 'object' || val === null) return true;
-      if (typeof rule === 'string' && rule.includes('*')) {
-        return Object.keys(val).every(key => wildcardMatch(rule, key));
-      }
-      if (typeof rule === 'object' && rule.$regex) {
-        try {
-          const regex = new RegExp(rule.$regex);
-          return Object.keys(val).every(key => regex.test(key));
-        } catch { return true; }
-      }
-      return true;
+      return Object.keys(val).every(key => keyValidator.safeParse(key).success);
     },
-    { message: `键名不符合规则` }
+    { message: `键名不符合 $key_rule 约束` }
   ) as any;
 }
 
