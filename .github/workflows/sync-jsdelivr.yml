@@ -1,10 +1,12 @@
-# 酒馆里用 @main 的 import 时：每次 push 到 main 后请求 jsDelivr 刷新该文件缓存，
-# 减轻「分支引用被 CDN 拖很久不更新」的情况（浏览器若仍旧可试 Ctrl+F5）。
+# 每次 push 到 main 后请求 jsDelivr 刷新 CDN 上 @main 的 bundle（purge.jsdelivr.net）。
+# 注意：jsDelivr 对浏览器下发 max-age=604800（7 天），purge 清不了用户本机已缓存的脚本；
+# 酒馆侧请用「动态 import + ?时间戳」见仓库 README「酒馆助手：为什么 push 了还是旧脚本？」。
 name: Purge jsDelivr (@main)
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -17,5 +19,10 @@ jobs:
       - name: Purge gh/@main/dist/bundle.js
         run: |
           REPO="${{ github.repository }}"
-          echo "purge gh/${REPO}@main/dist/bundle.js"
-          curl -fsS "https://purge.jsdelivr.net/gh/${REPO}@main/dist/bundle.js"
+          for path in \
+            "gh/${REPO}@main/dist/bundle.js" \
+            "gh/${REPO}@refs/heads/main/dist/bundle.js"
+          do
+            echo "purge https://purge.jsdelivr.net/${path}"
+            curl -fsS "https://purge.jsdelivr.net/${path}" || echo "warn: ${path}"
+          done
