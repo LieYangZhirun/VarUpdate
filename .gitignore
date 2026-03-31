@@ -1,5 +1,7 @@
-# 版本库正文：.github/、examples/、src/、tests/、dist/bundle.js 等。
-# 架构设计/ 仅本地维护，不纳入远程仓库。
+# 纳入版本库：本文件 .gitignore、README、LICENSE、package.json、tsconfig.json、
+# vitest.config.ts、esbuild.config.mjs、.github/、examples/、src/、tests/、
+# dist/bundle.js、dist/bundle.js.LEGAL.txt 等。
+# 架构设计/ 仅本地，不上传。
 
 架构设计/
 
