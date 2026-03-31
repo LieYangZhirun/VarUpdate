@@ -1,2 +1,45 @@
+# Dependencies
 node_modules/
+
+# TypeScript
 *.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment (do not commit secrets)
+.env
+.env.*
+!.env.example
+
+# Test / coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Build artifacts (local dev only; 生产构建不写 .map)
+dist/bundle.js.map
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / editors
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo
+*~
+
+# Vitest (若将来在仓库根生成独立缓存目录)
+.vitest/
