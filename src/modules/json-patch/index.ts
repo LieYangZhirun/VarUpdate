@@ -17,6 +17,22 @@ import {
   type ValidationContext,
 } from '../schema-compiler/index.js';
 
+/** 将第一层预处理丢弃项映射为 UpdateResult.discarded 形状（供容错阈值与事件负载计数） */
+function mapPreprocessDiscarded(
+  entries: Array<{ entry: unknown; reason: string }>,
+): UpdateResult['discarded'] {
+  return entries.map(({ entry, reason }) => {
+    const e = entry !== null && typeof entry === 'object' ? (entry as Record<string, unknown>) : null;
+    const rawOp = e?.op;
+    const op: PatchInstruction['op'] =
+      rawOp === 'replace' || rawOp === 'insert' || rawOp === 'delete' ? rawOp : 'replace';
+    const path = typeof e?.path === 'string' ? e.path : '(预处理)';
+    const instruction: PatchInstruction =
+      e && 'value' in e ? { op, path, value: e.value } : { op, path };
+    return { instruction, reason };
+  });
+}
+
 // ═══════════════════════════════════════════
 //  公开接口
 // ═══════════════════════════════════════════
@@ -50,10 +66,12 @@ export function executeUpdate(
   }
 
   // 记录预处理丢弃的条目
-  if (parseResult.discarded.length > 0) {
+  const preprocessDiscarded = mapPreprocessDiscarded(parseResult.discarded);
+
+  if (preprocessDiscarded.length > 0) {
     notify.warning(
       '指令预处理',
-      `${parseResult.discarded.length} 条指令格式不合法被丢弃`,
+      `${preprocessDiscarded.length} 条指令格式不合法被丢弃`,
       { category: 'pat' },
     );
   }
@@ -63,7 +81,7 @@ export function executeUpdate(
     return {
       data: currentData,
       appliedCount: 0,
-      discarded: [],
+      discarded: preprocessDiscarded,
       log: {},
     };
   }
@@ -93,7 +111,7 @@ export function executeUpdate(
     return {
       data: currentData,
       appliedCount: 0,
-      discarded: pathDiscarded,
+      discarded: [...preprocessDiscarded, ...pathDiscarded],
       log: {},
     };
   }
@@ -111,8 +129,7 @@ export function executeUpdate(
     safeParseBound,
   );
 
-  // 合并丢弃记录
-  execResult.discarded = [...pathDiscarded, ...execResult.discarded];
+  execResult.discarded = [...preprocessDiscarded, ...pathDiscarded, ...execResult.discarded];
 
   return execResult;
 }

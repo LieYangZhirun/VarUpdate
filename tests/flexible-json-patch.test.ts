@@ -12,6 +12,30 @@ describe('parseInstructions', () => {
       expect(result.instructions[0].op).toBe('replace');
     });
 
+    it('双层外层围栏 → 连续剥两层', () => {
+      const raw =
+        '```\n```json\n[{"op":"replace","path":"HP","value":1}]\n```\n```';
+      const result = parseInstructions(raw);
+      expect(result.instructions).toHaveLength(1);
+      expect(result.instructions[0].value).toBe(1);
+    });
+
+    it('JSON value 内的 ``` 不剥（PromptalYAML 式多行串）', () => {
+      const inner = '```\nline\n```';
+      const raw = `[{"op":"replace","path":"k","value":${JSON.stringify(inner)}}]`;
+      const result = parseInstructions(raw);
+      expect(result.instructions).toHaveLength(1);
+      expect(result.instructions[0].value).toBe(inner);
+    });
+
+    it('JSON value 内 ``` 紧贴英文前缀不被误当围栏语言名吃掉', () => {
+      const inner = '```say "hi"```';
+      const raw = `[{"op":"replace","path":"k","value":${JSON.stringify(inner)}}]`;
+      const result = parseInstructions(raw);
+      expect(result.instructions).toHaveLength(1);
+      expect(result.instructions[0].value).toBe(inner);
+    });
+
     it('去除 BOM 标记', () => {
       const result = parseInstructions('\uFEFF[{"op":"replace","path":"HP","value":80}]');
       expect(result.instructions).toHaveLength(1);

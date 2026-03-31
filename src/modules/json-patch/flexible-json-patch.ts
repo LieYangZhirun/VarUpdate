@@ -4,7 +4,7 @@
  * 容错 JSON Patch 解析器 —— 最大限度容忍 AI 模型输出的格式偏差
  *
  * 四步预处理管道：
- * 1. 文本清洗：去除 markdown 代码块、BOM、前后自然语言文本
+ * 1. 文本清洗：Markdown 围栏逐层剥除、去 BOM、截取数组/对象主体
  * 2. 引号修正：外向内对称解析，修复未转义双引号 + 单引号升级
  * 3. 宽松 JSON 解析：通过 json5 容忍尾逗号、无引号键名等
  * 4. 语义规范化：op 别名映射 + 结构校验
@@ -106,25 +106,48 @@ export function parseInstructions(rawText: string): ParseResult {
 //  步骤 1：文本清洗
 // ═══════════════════════════════════════════
 
+/** 若整段符合多行或单行紧凑围栏形态，返回去掉一层围栏后的正文；否则返回 null。 */
+function tryStripOneOuterFence(text: string): string | null {
+  const t = text.trim();
+  if (!t.startsWith('```')) return null;
+
+  const lines = t.split(/\r?\n/);
+  if (lines.length >= 2) {
+    const first = lines[0].trim();
+    const last = lines[lines.length - 1].trim();
+    // 首行须为 ``` 或 ```lang，且该行不含其它反引号（与围栏语法一致）
+    if (/^```[^\n`]*$/.test(first) && last === '```') {
+      return lines.slice(1, -1).join('\n').trim();
+    }
+  }
+
+  // 单段紧凑：` ```json[...]``` ` 或 ` ``` [...] ``` `
+  const open = t.match(/^```[^\n`]*\s*/);
+  if (!open) return null;
+  const rest = t.slice(open[0].length);
+  if (!rest.endsWith('```')) return null;
+  return rest.slice(0, -3).trimEnd().trim();
+}
+
+/** 重复剥除外层围栏，至多 5 次 */
+function stripOuterCodeFences(text: string): string {
+  let result = text;
+  for (let i = 0; i < 5; i++) {
+    const next = tryStripOneOuterFence(result);
+    if (next === null) break;
+    result = next;
+  }
+  return result;
+}
+
 /**
- * 清洗 AI 输出的原始文本
- *
- * - 去除 BOM 标记
- * - 去除 markdown 代码块标记
- * - 去除前后自然语言文本（提取 [ ] 之间内容）
+ * 清洗 AI 输出的原始文本：去 BOM、剥 Markdown 围栏、截取 `[…]` 或 `{…}` 指令片段。
  */
 function cleanText(text: string): string {
-  let result = text;
+  let result = text.replace(/^\uFEFF/, '');
 
-  // 去除 BOM
-  result = result.replace(/^\uFEFF/, '');
+  result = stripOuterCodeFences(result);
 
-  // 去除 markdown 代码块标记
-  // 匹配 ```json、```JSON、```、```text 等变体
-  result = result.replace(/```[\w]*\s*/g, '');
-  result = result.replace(/```/g, '');
-
-  // 去除首尾空白
   result = result.trim();
 
   // 提取 JSON 数组内容：查找第一个 [ 和最后一个 ]

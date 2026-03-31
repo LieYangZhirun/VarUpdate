@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { executeUpdateSync } from '../src/modules/json-patch/index';
+import { executeUpdate, executeUpdateSync } from '../src/modules/json-patch/index';
 import type { PatchInstruction } from '../src/types/index';
 
 describe('json-patch 引擎', () => {
@@ -84,6 +84,33 @@ describe('json-patch 引擎', () => {
       const result = executeUpdateSync(instructions, data);
       expect(result.appliedCount).toBe(1);
       expect(result.data.HP).toBe(100);
+    });
+  });
+
+  describe('executeUpdate（含预处理层）', () => {
+    it('预处理丢弃与有效指令混合时 discarded 计入丢弃数', () => {
+      const data = { 角色: { HP: 80 } };
+      const raw = `[
+    "bad",
+    { "op": "replace", "path": "/角色/HP", "value": 99 }
+  ]`;
+      const result = executeUpdate(raw, data);
+      expect(result.appliedCount).toBe(1);
+      expect(result.data.角色.HP).toBe(99);
+      expect(result.discarded.length).toBeGreaterThanOrEqual(1);
+      expect(result.discarded.some(d => d.reason.includes('非对象'))).toBe(true);
+    });
+
+    it('外层 ``` 围栏 + value 内 PromptalYAML 式 ``` 原样写入', () => {
+      const data = { 角色: { 背景: '' } };
+      const inner = '```\n第一章\n```';
+      const raw =
+        '```json\n[{"op":"replace","path":"/角色/背景","value":' +
+        JSON.stringify(inner) +
+        '}]\n```';
+      const result = executeUpdate(raw, data);
+      expect(result.appliedCount).toBe(1);
+      expect(result.data.角色.背景).toBe(inner);
     });
   });
 

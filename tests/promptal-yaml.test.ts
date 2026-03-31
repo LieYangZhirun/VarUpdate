@@ -118,6 +118,21 @@ describe('serializeToPromptalYAML', () => {
       expect(result).toContain('```');
       expect(result).toContain('曾经是骑士团长，');
     });
+
+    it('多行且 trimStart 后以 ``` 起首 → 输出中相邻行不出现连续 ``` 开块', () => {
+      const pre = '```\n第一章\n```';
+      const result = serializeToPromptalYAML(pre);
+      expect(result).not.toMatch(/\n```\n```\n/);
+      expect(result).toContain('第一章');
+      expect((result.match(/```/g) ?? []).length).toBe(2);
+    });
+
+    it('前导空白后仍以 ``` 起首 → 同上单层块语义', () => {
+      const pre = '\n\n  ```\n内文\n```';
+      const result = serializeToPromptalYAML(pre);
+      expect(result).not.toMatch(/```\n```\n/);
+      expect(result).toContain('内文');
+    });
   });
 
   // ═══════════════════════════════════════════

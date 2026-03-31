@@ -8,7 +8,7 @@
  * - 基础类型数组使用内联格式 [a, b, c]
  * - 复合类型数组使用展开格式（- 前缀）
  * - 空集合统一为 [] 和 {}
- * - 多行字符串使用 ``` 围栏代码块包裹
+ * - 多行字符串默认用 ``` 围栏包裹；去前导空白后以 ``` 起首的，只加行首缩进、不另加外层围栏
  * - 布尔值和数值直接输出字面量
  *
  * @module promptal-yaml
@@ -54,7 +54,8 @@ export function serializeToPromptalYAML(value: any, indentLevel: number = 0): st
  * 序列化字符串值
  *
  * - 单行字符串：直接输出（不加引号）
- * - 多行字符串：使用 ``` 围栏代码块包裹
+ * - 多行字符串：默认 ``` 围栏包裹
+ * - `trimStart()` 后以 ``` 起首：按 indentLevel 为各行加缩进，不另加外层 ```
  */
 function serializeString(value: string, indentLevel: number): string {
   if (!value.includes('\n')) {
@@ -62,9 +63,13 @@ function serializeString(value: string, indentLevel: number): string {
     return value;
   }
 
-  // 多行字符串：``` 围栏包裹
   const indent = INDENT_UNIT.repeat(indentLevel);
   const lines = value.split('\n');
+
+  if (value.trimStart().startsWith('```')) {
+    return '\n' + lines.map(line => indent + line).join('\n');
+  }
+
   const fencedLines = [
     '```',
     ...lines.map(line => indent + line),
