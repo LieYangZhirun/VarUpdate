@@ -1,5 +1,6 @@
-# 本地维护、不进入远端仓库
-.github/
+# 版本库正文：.github/、examples/、src/、tests/、dist/bundle.js 等。
+# 架构设计/ 仅本地维护，不纳入远程仓库。
+
 架构设计/
 
 node_modules/

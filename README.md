@@ -43,13 +43,7 @@ VarUpdate/
 │       └── index.ts                      # 共享类型定义（含 ScriptError 基类）
 ├── tests/                                # vitest 测试
 ├── dist/                                 # esbuild 构建输出
-├── 架构设计/                              # 设计文档（先读 架构设计/README.md）
-│   ├── README.md                         # 文档导读与维护约定
-│   ├── 面向用户功能卡.md
-│   ├── 基础设施功能卡.md
-│   ├── 接口与契约集中定义.md
-│   ├── 代码规范与工程细节.md
-│   └── 测试规范.md
+├── 架构设计/                             # 仅本地设计文档（.gitignore，不进远程仓库）
 ├── esbuild.config.mjs                    # 构建配置
 ├── tsconfig.json                         # TypeScript 配置
 ├── vitest.config.ts                      # 测试配置
