@@ -1,45 +1,13 @@
-# Dependencies
+# 以下目录与文件属于版本库正文，勿写进忽略规则：
+#   .github/   架构设计/   examples/   src/   tests/
+#   dist/bundle.js   dist/bundle.js.LEGAL.txt   （酒馆 / jsDelivr 直链）
+
 node_modules/
-
-# TypeScript
-*.tsbuildinfo
-
-# Logs
-logs/
-*.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Environment (do not commit secrets)
+*.tsbuildinfo
+dist/bundle.js.map
 .env
 .env.*
-!.env.example
 
-# Test / coverage
-coverage/
-.nyc_output/
-*.lcov
-
-# Build artifacts (local dev only; 生产构建不写 .map)
-dist/bundle.js.map
-
-# OS
 .DS_Store
 Thumbs.db
-Desktop.ini
-
-# IDE / editors
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.swp
-*.swo
-*~
-
-# Vitest (若将来在仓库根生成独立缓存目录)
-.vitest/
