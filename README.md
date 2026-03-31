@@ -43,7 +43,6 @@ VarUpdate/
 │       └── index.ts                      # 共享类型定义（含 ScriptError 基类）
 ├── tests/                                # vitest 测试
 ├── dist/                                 # esbuild 构建输出
-├── 架构设计/                             # 仅本地设计文档（.gitignore，不进远程仓库）
 ├── esbuild.config.mjs                    # 构建配置
 ├── tsconfig.json                         # TypeScript 配置
 ├── vitest.config.ts                      # 测试配置
@@ -128,12 +127,10 @@ npm run typecheck
 | `SchemaCompileError`  | 模块2 Schema 编译器   | Schema 编译失败                 |
 | `PatchParseError`     | 模块3 JSON Patch 引擎 | Patch 指令文本解析失败          |
 
-## 跨脚本协作
+## 工作模式
 
-VarUpdate 可通过事件总线与 Agents 脚本协作：
+VarUpdate 可独立运行，通过酒馆原生 `MESSAGE_RECEIVED` 事件接收消息，或者通过事件总线与 Agents 脚本协作：
 
 - Agents → VarUpdate：`agents:message_complete` 传递 AI 生成的消息内容
 - VarUpdate → Agents：`varupdate:updated` / `varupdate:update_failed` 反馈变量更新结果
 - Agents → VarUpdate：`varupdate:retry_requested` 通知回退变量状态
-
-VarUpdate 亦可独立运行，通过酒馆原生 `MESSAGE_RECEIVED` 事件接收消息。

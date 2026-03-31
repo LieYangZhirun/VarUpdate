@@ -1,16 +1,9 @@
-# 纳入版本库：本文件 .gitignore、README、LICENSE、package.json、tsconfig.json、
-# vitest.config.ts、esbuild.config.mjs、.github/、examples/、src/、tests/、
-# dist/bundle.js、dist/bundle.js.LEGAL.txt 等。
-# 架构设计/ 仅本地，不上传。
-
 架构设计/
-
 node_modules/
 npm-debug.log*
 *.tsbuildinfo
 dist/bundle.js.map
 .env
 .env.*
-
 .DS_Store
 Thumbs.db
