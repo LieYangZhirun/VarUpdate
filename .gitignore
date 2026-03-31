@@ -1,6 +1,6 @@
-# 以下目录与文件属于版本库正文，勿写进忽略规则：
-#   .github/   架构设计/   examples/   src/   tests/
-#   dist/bundle.js   dist/bundle.js.LEGAL.txt   （酒馆 / jsDelivr 直链）
+# 本地维护、不进入远端仓库
+.github/
+架构设计/
 
 node_modules/
 npm-debug.log*
