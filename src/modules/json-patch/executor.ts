@@ -9,6 +9,7 @@
 
 import { safeParseWithContext } from '../schema-compiler/schema-to-zod.js';
 import { getValueByPath, setValueByPath, deleteByPath, parsePath } from '../../shared/path-utils.js';
+import { fillPatchValueForSchemaPath } from './patch-value-fill.js';
 import type { PatchInstruction, UpdateResult } from '../../types/index.js';
 import type { CompiledSchema } from '../schema-compiler/index.js';
 import * as notify from '../notification.js';
@@ -51,7 +52,7 @@ export function executeInstructions(
       const oldValue = getValueByPath(result.data, instruction.path);
 
       // 执行操作
-      const success = applyInstruction(instruction, result.data);
+      const success = applyInstruction(instruction, result.data, schema);
       if (!success) {
         result.discarded.push({ instruction, reason: '操作执行失败' });
         continue;
@@ -100,8 +101,17 @@ export function executeInstructions(
  *
  * @returns 是否执行成功
  */
-function applyInstruction(instruction: PatchInstruction, data: Record<string, any>): boolean {
+function applyInstruction(
+  instruction: PatchInstruction,
+  data: Record<string, any>,
+  schema?: CompiledSchema,
+): boolean {
   const { op, path, value } = instruction;
+
+  const valueForWrite =
+    schema?.raw && value !== undefined && (op === 'replace' || op === 'insert')
+      ? fillPatchValueForSchemaPath(schema.raw, path, value)
+      : value;
 
   switch (op) {
     case 'replace': {
@@ -110,7 +120,7 @@ function applyInstruction(instruction: PatchInstruction, data: Record<string, an
       if (existing === undefined) {
         return false; // 路径不存在，replace 失败
       }
-      setValueByPath(data, path, value);
+      setValueByPath(data, path, valueForWrite);
       return true;
     }
 
@@ -124,7 +134,7 @@ function applyInstruction(instruction: PatchInstruction, data: Record<string, an
         if (!Array.isArray(parent)) {
           return false;
         }
-        setValueByPath(data, path, value);
+        setValueByPath(data, path, valueForWrite);
         return true;
       }
 
@@ -133,7 +143,7 @@ function applyInstruction(instruction: PatchInstruction, data: Record<string, an
       if (existing !== undefined) {
         return false; // 已存在，insert 失败
       }
-      setValueByPath(data, path, value);
+      setValueByPath(data, path, valueForWrite);
       return true;
     }
 

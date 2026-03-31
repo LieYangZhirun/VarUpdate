@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { executeUpdate, executeUpdateSync } from '../src/modules/json-patch/index';
+import { compileSchemaFromData, bindSafeParseWithContext } from '../src/modules/schema-compiler/index';
+import { getValueByPath } from '../src/shared/path-utils';
 import type { PatchInstruction } from '../src/types/index';
 
 describe('json-patch 引擎', () => {
@@ -111,6 +113,75 @@ describe('json-patch 引擎', () => {
       const result = executeUpdate(raw, data);
       expect(result.appliedCount).toBe(1);
       expect(result.data.角色.背景).toBe(inner);
+    });
+  });
+
+  describe('Patch 写入值按 Schema 补全缺失子键', () => {
+    it('必填子键缺省：$default 或 null；$optional 不添加', () => {
+      const schemaData = {
+        $defs: {
+          子: {
+            $type: 'object',
+            必填无默认: { $type: 'any' },
+            可跳过: { $type: 'string', $optional: true },
+            有默认: { $type: 'string', $default: '缺省Z' },
+          },
+        },
+        根: {
+          实体: {
+            $type: 'object',
+            嵌套: { $type: '子' },
+          },
+        },
+      };
+      const schema = compileSchemaFromData(schemaData);
+      const data = { 根: { 实体: { 嵌套: { 必填无默认: 1, 有默认: '旧' } } } };
+      const bound = bindSafeParseWithContext(schema, {
+        resolveRef: (p: string) => getValueByPath(data, p),
+      });
+      const result = executeUpdateSync(
+        [{ op: 'replace', path: '根/实体/嵌套', value: {} }],
+        data,
+        schema,
+        bound,
+      );
+      expect(result.appliedCount).toBe(1);
+      expect(result.data.根.实体.嵌套).toEqual({
+        必填无默认: null,
+        有默认: '缺省Z',
+      });
+      expect(Object.prototype.hasOwnProperty.call(result.data.根.实体.嵌套, '可跳过')).toBe(false);
+    });
+
+    it('嵌套 object 内层缺键递归补全', () => {
+      const schemaData = {
+        $defs: {
+          内层: {
+            $type: 'object',
+            leaf: { $type: 'string', $default: 'L' },
+          },
+        },
+        根: {
+          $type: 'object',
+          外层: {
+            $type: 'object',
+            inner: { $type: '内层' },
+          },
+        },
+      };
+      const schema = compileSchemaFromData(schemaData);
+      const data = { 根: { 外层: { inner: { leaf: 'x' } } } };
+      const bound = bindSafeParseWithContext(schema, {
+        resolveRef: (p: string) => getValueByPath(data, p),
+      });
+      const result = executeUpdateSync(
+        [{ op: 'replace', path: '根/外层', value: { inner: {} } }],
+        data,
+        schema,
+        bound,
+      );
+      expect(result.appliedCount).toBe(1);
+      expect(result.data.根.外层.inner).toEqual({ leaf: 'L' });
     });
   });
 
