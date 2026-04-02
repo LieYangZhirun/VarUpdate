@@ -148,6 +148,35 @@ describe('schema-to-zod', () => {
         inventory: { $type: 'array<UnknownType>' },
       })).toThrow(SchemaCompileError);
     });
+
+    it('$defs 前向引用：引用项排在被引用项之前时，多轮编译仍成功', () => {
+      const schema = compileSchema({
+        $defs: {
+          角色: { $type: ['女主', '配角'] },
+          女主: { $type: 'object', 名称: { $type: 'string' } },
+          配角: { $type: 'object', 职能: { $type: 'string' } },
+        },
+        名单: { $type: 'record<角色>' },
+      });
+      const ok = validateWithSchema(
+        schema,
+        { 名单: { 甲: { 名称: '女主甲' }, 乙: { 职能: '路人' } } },
+        mockContext(),
+      );
+      expect(ok.success).toBe(true);
+    });
+
+    it('$defs 循环别名引用 → 多轮仍失败', () => {
+      expect(() =>
+        compileSchema({
+          $defs: {
+            A: { $type: 'B' },
+            B: { $type: 'A' },
+          },
+          root: { $type: 'A' },
+        }),
+      ).toThrow(SchemaCompileError);
+    });
   });
 
   // ═══════════════════════════════════════════

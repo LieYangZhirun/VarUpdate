@@ -51,18 +51,56 @@ let _compileErrors: Array<{ path: string; message: string }> = [];
 //  主入口
 // ═══════════════════════════════════════════
 
+/** $defs 多轮编译最大轮数：解决前向引用（被引用 def 在文件中排在后） */
+const MAX_DEF_COMPILE_ROUNDS = 5;
+
 export function compileSchema(schemaData: Record<string, any>): CompiledSchema {
   _defRegistry = new Map();
   _compileErrors = [];
   const defNames: string[] = [];
 
   if (schemaData.$defs && typeof schemaData.$defs === 'object') {
-    for (const [name, def] of Object.entries(schemaData.$defs)) {
-      defNames.push(name);
-      try {
-        _defRegistry.set(name, compileNode(def as Record<string, any>, `$defs/${name}`));
-      } catch (e) {
-        _compileErrors.push({ path: `$defs/${name}`, message: `结构体编译失败: ${(e as Error).message}` });
+    const defEntries = Object.entries(schemaData.$defs);
+    for (const [name] of defEntries) defNames.push(name);
+
+    const pending = new Set(defEntries.map(([name]) => name));
+    const lastFailMessage = new Map<string, string>();
+
+    for (let round = 0; round < MAX_DEF_COMPILE_ROUNDS && pending.size > 0; round++) {
+      const succeededThisRound: string[] = [];
+      const roundFailures: Array<{ name: string; message: string }> = [];
+
+      for (const [name, def] of defEntries) {
+        if (!pending.has(name)) continue;
+        try {
+          const zod = compileNode(def as Record<string, any>, `$defs/${name}`);
+          _defRegistry.set(name, zod);
+          succeededThisRound.push(name);
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          lastFailMessage.set(name, message);
+          roundFailures.push({ name, message });
+        }
+      }
+
+      for (const n of succeededThisRound) pending.delete(n);
+
+      if (pending.size === 0) break;
+
+      if (succeededThisRound.length === 0) {
+        for (const f of roundFailures) {
+          _compileErrors.push({ path: `$defs/${f.name}`, message: `结构体编译失败: ${f.message}` });
+        }
+        break;
+      }
+    }
+
+    if (pending.size > 0 && _compileErrors.length === 0) {
+      for (const name of pending) {
+        _compileErrors.push({
+          path: `$defs/${name}`,
+          message: `结构体编译失败: ${lastFailMessage.get(name) ?? '超过多轮编译上限仍未能解析依赖'}`,
+        });
       }
     }
   }
