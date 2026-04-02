@@ -19,6 +19,7 @@
 import * as notify from './notification.js';
 import { readVariables, writeVariables } from './variable-store.js';
 import { VARUPDATE_CONFIG_KEY, type NotifyLevel } from '../types/index.js';
+import { VARUPDATE_DISPLAY_VERSION } from '../version.js';
 
 // ═══════════════════════════════════════════
 //  常量
@@ -322,6 +323,18 @@ function showHelp(key: string): void {
 // ═══════════════════════════════════════════
 
 const PANEL_CSS = `
+.varupdate-script-version-row {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.varupdate-script-version {
+  font-size: 0.82em;
+  opacity: 0.72;
+  color: var(--SmartThemeBodyColor, inherit);
+  user-select: none;
+}
 .varupdate-button-grid {
   display: flex;
   flex-wrap: wrap;
@@ -396,6 +409,10 @@ const PANEL_HTML = `
     <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
   </div>
   <div class="inline-drawer-content">
+
+    <div class="varupdate-script-version-row">
+      <span class="varupdate-script-version" id="varupdate-display-version" title="VarUpdate 脚本版本；与 package.json 对齐。若 Schema 故意乱序 $defs 后出现多条编译错误，请确认已更新为支持多轮 $defs 的脚本。">VarUpdate ${VARUPDATE_DISPLAY_VERSION}</span>
+    </div>
 
     <!-- 顶部快捷按钮区 -->
     <div class="varupdate-button-grid">
