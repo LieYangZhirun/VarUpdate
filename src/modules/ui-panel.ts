@@ -137,9 +137,8 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     </table>
 
     <p style="margin-top: 15px;"><b>1.2 默认底值 [Var_Default]</b><br>
-    在世界书的条目标题中加入 <code>[Var_Default]</code>标签，集中定义各字段的默认底值。Schema 加载时，脚本会将此处的值补全到 Schema 的 <code>$default</code> 中（仅补全缺失项，不覆盖已有 <code>$default</code>）。当 <code>&lt;Var_Initial&gt;</code> 定义的初始变量有遗漏、或 Patch 操作产生缺失字段时，系统会自动用 <code>$default</code> 进行填充。<br>
-    <span style="color:var(--SmartThemeHintColor, #888); font-size: 0.9em;">注：若在 Schema 的 object 节点上写了 <code>$default: { ... }</code> 作为对象级默认值，其中的字段会级联到无自身 <code>$default</code> 的子字段。子字段自身 <code>$default</code> 优先级更高。</span></p>
-
+    在世界书的条目标题中加入 <code>[Var_Default]</code>标签，集中定义各字段的默认底值对Schema的<code>$default</code>字段进行补全(不覆盖已有 <code>$default</code>）。当 <code>&lt;Var_Initial&gt;</code> 定义的初始变量有遗漏或Update指令缺失字段时，脚本会使用<code>$default</code>定义的默认值进行填充。<br>
+    
     <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">2. 消息流指令 (AI 或玩家输出)</h3>
 
     <p><b>2.1 初始化 &lt;Var_Initial&gt;</b><br>
