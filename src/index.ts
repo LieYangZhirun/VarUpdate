@@ -3,7 +3,7 @@
  *
  * 脚本入口与业务流程编排。《接口与契约集中定义》第四章约定各层形状摘要如下：
  * - message：`data`、`log`、可选 `isInitPoint`
- * - chat：`schema`、`default`、可选 `schemaStatus`（`not_loaded` | `compiled` | `error`）
+ * - chat：`schema`、可选 `schemaStatus`（`not_loaded` | `compiled` | `error`）
  * - global：`VarUpdate_config`（`notifyLevel`、`autoInitialize`、`discardThreshold`、`retentionDepth`）
  */
 
@@ -31,6 +31,7 @@ import { registerFilterHooks, unregisterFilterHooks } from './modules/native-fil
 import { sanitizeMessageIndexForWrite } from './shared/message-index.js';
 import { getValueByPath } from './shared/path-utils.js';
 import { mergeDeepWithConflictCheck, MergeConflictError } from './shared/merge-deep-conflict.js';
+import { enrichSchemaWithDefaults, fillDefaultsForValue } from './shared/schema-defaults.js';
 import type { ExtractedTag, MessageCompletePayload } from './types/index.js';
 // z（Zod）由酒馆助手注入到 iframe 全局，无需 import
 
@@ -392,9 +393,12 @@ function getPreviousData(messageIndex: number): Record<string, any> {
       return deepClone(prevVars.data);
     }
   }
-  // chat 层默认值键名为 default（接口与契约 4.2）
-  const chatData = readVariables('chat');
-  return chatData.default ? deepClone(chatData.default) : {};
+  // 无前层数据时，从 Schema 的 $default 生成初始状态
+  const schema = getCachedSchema();
+  if (schema?.raw) {
+    return fillDefaultsForValue({}, schema.raw, schema.raw, { mode: 'insert' });
+  }
+  return {};
 }
 
 /**
@@ -410,22 +414,23 @@ async function applyInitialMergedData(
   opts?: { quiet?: boolean },
 ): Promise<boolean> {
   try {
-    // Default 补全：用 chat 层 default 填充 Initial 中未提供的字段
-    const chatData = readVariables('chat');
-    const defaultValues = chatData.default || {};
-    const merged = mergeDefaults(data, defaultValues);
-
-    // Schema 校验 + $default 填充 + force 类型转换
-    let finalData = merged;
+    // Initial = insert 语义：按 Schema $default 全量填充缺失字段（含 $optional 字段）
     const schema = getCachedSchema();
+    let filled = data;
+    if (schema?.raw) {
+      filled = fillDefaultsForValue(data, schema.raw, schema.raw, { mode: 'insert' });
+    }
+
+    // Schema 校验 + force 类型转换
+    let finalData = filled;
     if (schema) {
       // 须走 safeParseWithContext，否则 Schema 中 refer() 不会在 Initial 阶段生效
       const parseFn = bindSafeParseWithContext(schema, {
-        resolveRef: (path: string) => getValueByPath(merged, path),
+        resolveRef: (path: string) => getValueByPath(filled, path),
       });
-      const zResult = parseFn(merged);
+      const zResult = parseFn(filled);
       if (zResult.success) {
-        finalData = (zResult.data ?? merged) as Record<string, any>;
+        finalData = (zResult.data ?? filled) as Record<string, any>;
       } else {
         const detail =
           zResult.error?.issues
@@ -470,23 +475,7 @@ async function applyInitialMergedData(
   }
 }
 
-/**
- * 用 Default 值补全 data 中缺失的字段（递归合并，不覆盖已有值）
- */
-function mergeDefaults(data: Record<string, any>, defaults: Record<string, any>): Record<string, any> {
-  const result = deepClone(data);
-  for (const key of Object.keys(defaults)) {
-    if (result[key] === undefined) {
-      result[key] = deepClone(defaults[key]);
-    } else if (
-      typeof result[key] === 'object' && result[key] !== null && !Array.isArray(result[key]) &&
-      typeof defaults[key] === 'object' && defaults[key] !== null && !Array.isArray(defaults[key])
-    ) {
-      result[key] = mergeDefaults(result[key], defaults[key]);
-    }
-  }
-  return result;
-}
+// mergeDefaults 已由 fillDefaultsForValue 取代（$default 统一由 Schema 驱动）
 
 /**
  * 处理变量更新（面向用户 D-1~D-4, 七·F-2）
@@ -766,27 +755,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
       }
     }
 
-    if (mergedSchema) {
-      try {
-        const compiled = compileSchemaFromData(mergedSchema);
-        chatData.schema = compiled.raw;
-        chatData.schemaStatus = 'compiled';
-        const n = schemaTagged.filter(t => t.body.trim()).length;
-        announceSchemaOk(`编译成功（${n} 条合并），${compiled.defNames.length} 个 $defs 结构体`);
-
-        tryRegisterMessageLayerVariableSchema(compiled.validator as z.ZodTypeAny);
-
-        await eventBus.emit(eventBus.EVENTS.VAR_SCHEMA_READY, { defNames: compiled.defNames });
-      } catch (e) {
-        ok = false;
-        chatData.schemaStatus = 'error';
-        delete chatData.schema;
-        notify.error('Schema 编译失败', errorMessageFromUnknown(e), { category: 'wb' });
-      }
-    } else if (schemaTagged.some(t => t.body.trim()) && chatData.schemaStatus !== 'error') {
-      // 有条目但正文全空等：不覆盖 compiled，仅保持现状
-    }
-
+    // ── Default 解析（须在 Schema 编译之前完成，以便合并 $default） ──
     let mergedDefault: Record<string, any> | null = null;
     try {
       for (const { comment, body } of defaultTagged) {
@@ -822,9 +791,34 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
     }
 
     if (mergedDefault) {
-      chatData.default = mergedDefault;
       const n = defaultTagged.filter(t => t.body.trim()).length;
-      announceDefaultOk(`已加载 ${Object.keys(chatData.default).length} 个顶层键（${n} 条合并）`);
+      announceDefaultOk(`已加载 ${Object.keys(mergedDefault).length} 个顶层键（${n} 条合并），已合并至 Schema $default`);
+    }
+
+    // ── Schema 编译（含 Default 合并） ──
+    if (mergedSchema) {
+      // [Var_Default] 的值补全到 Schema 的 $default（仅主结构，不进 $defs）
+      if (mergedDefault) {
+        mergedSchema = enrichSchemaWithDefaults(mergedSchema, mergedDefault);
+      }
+      try {
+        const compiled = compileSchemaFromData(mergedSchema);
+        chatData.schema = compiled.raw;
+        chatData.schemaStatus = 'compiled';
+        const n = schemaTagged.filter(t => t.body.trim()).length;
+        announceSchemaOk(`编译成功（${n} 条合并），${compiled.defNames.length} 个 $defs 结构体`);
+
+        tryRegisterMessageLayerVariableSchema(compiled.validator as z.ZodTypeAny);
+
+        await eventBus.emit(eventBus.EVENTS.VAR_SCHEMA_READY, { defNames: compiled.defNames });
+      } catch (e) {
+        ok = false;
+        chatData.schemaStatus = 'error';
+        delete chatData.schema;
+        notify.error('Schema 编译失败', errorMessageFromUnknown(e), { category: 'wb' });
+      }
+    } else if (schemaTagged.some(t => t.body.trim()) && chatData.schemaStatus !== 'error') {
+      // 有条目但正文全空等：不覆盖 compiled，仅保持现状
     }
 
     writeVariables('chat', chatData);
@@ -865,7 +859,6 @@ async function handleReloadRules(): Promise<void> {
   clearCache();
   const chatData = readVariables('chat');
   delete chatData.schema;
-  delete chatData.default;
   chatData.schemaStatus = 'not_loaded';
   writeVariables('chat', chatData);
   const ok = await loadSchemaAndDefaultFromWorldBook({ expectLorebook: true });

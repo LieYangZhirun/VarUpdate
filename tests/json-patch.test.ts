@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { executeUpdate, executeUpdateSync } from '../src/modules/json-patch/index';
 import { compileSchemaFromData, bindSafeParseWithContext } from '../src/modules/schema-compiler/index';
 import { getValueByPath } from '../src/shared/path-utils';
+import { getSchemaNodeForPath } from '../src/modules/json-patch/patch-value-fill';
 import type { PatchInstruction } from '../src/types/index';
 
 describe('json-patch 引擎', () => {
@@ -117,7 +118,7 @@ describe('json-patch 引擎', () => {
   });
 
   describe('Patch 写入值按 Schema 补全缺失子键', () => {
-    it('必填子键缺省：$default 或 null；$optional 不添加', () => {
+    it('replace 缺失子键：从旧值恢复 → $default → null；$optional 不添加', () => {
       const schemaData = {
         $defs: {
           子: {
@@ -146,9 +147,10 @@ describe('json-patch 引擎', () => {
         bound,
       );
       expect(result.appliedCount).toBe(1);
+      // replace 模式：缺失字段从旧值恢复
       expect(result.data.根.实体.嵌套).toEqual({
-        必填无默认: null,
-        有默认: '缺省Z',
+        必填无默认: 1,  // 从旧值恢复
+        有默认: '旧',   // 从旧值恢复
       });
       expect(Object.prototype.hasOwnProperty.call(result.data.根.实体.嵌套, '可跳过')).toBe(false);
     });
@@ -181,7 +183,8 @@ describe('json-patch 引擎', () => {
         bound,
       );
       expect(result.appliedCount).toBe(1);
-      expect(result.data.根.外层.inner).toEqual({ leaf: 'L' });
+      // replace 模式：inner 的旧值 { leaf: 'x' } 被恢复
+      expect(result.data.根.外层.inner).toEqual({ leaf: 'x' });
     });
   });
 
@@ -202,5 +205,70 @@ describe('json-patch 引擎', () => {
       expect(result.data.角色.MP).toBe(50);
       expect(result.data.角色.名称).toBeUndefined();
     });
+  });
+});
+
+// ═══════════════════════════════════════════
+//  getSchemaNodeForPath — $defs / union 穿透
+// ═══════════════════════════════════════════
+
+describe('getSchemaNodeForPath — 路径穿透', () => {
+  const schema = {
+    $defs: {
+      女主: {
+        $type: 'object',
+        基本信息: { $type: 'object', 名称: { $type: 'string' } },
+        HP: { $type: 'number' },
+      },
+      配角: {
+        $type: 'object',
+        $extensible: true,
+        职能: { $type: 'string' },
+      },
+      角色: { $type: ['女主', '配角'] },
+      地点: {
+        $type: 'object',
+        描述: { $type: 'string' },
+      },
+    },
+    角色列表: { $type: 'record<角色>' },
+    城市地图: { $type: 'record<地点>' },
+    主角: {
+      $type: '女主',
+    },
+  };
+
+  it('穿透 $defs 引用：主角/HP', () => {
+    const node = getSchemaNodeForPath(schema, '主角/HP');
+    expect(node).toBeTruthy();
+    expect(node.$type).toBe('number');
+  });
+
+  it('穿透 $defs 引用的嵌套：主角/基本信息/名称', () => {
+    const node = getSchemaNodeForPath(schema, '主角/基本信息/名称');
+    expect(node).toBeTruthy();
+    expect(node.$type).toBe('string');
+  });
+
+  it('穿透 record + $defs：城市地图/公园/描述', () => {
+    const node = getSchemaNodeForPath(schema, '城市地图/公园/描述');
+    expect(node).toBeTruthy();
+    expect(node.$type).toBe('string');
+  });
+
+  it('穿透 record + union：角色列表/某角色/HP（女主分支）', () => {
+    const node = getSchemaNodeForPath(schema, '角色列表/某角色/HP');
+    expect(node).toBeTruthy();
+    expect(node.$type).toBe('number');
+  });
+
+  it('穿透 record + union：角色列表/某角色/职能（配角分支）', () => {
+    const node = getSchemaNodeForPath(schema, '角色列表/某角色/职能');
+    expect(node).toBeTruthy();
+    expect(node.$type).toBe('string');
+  });
+
+  it('不存在的路径返回 null', () => {
+    expect(getSchemaNodeForPath(schema, '角色列表/某角色/不存在字段')).toBeNull();
   });
 });

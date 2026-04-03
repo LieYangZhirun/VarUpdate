@@ -9,7 +9,7 @@
 
 import { safeParseWithContext } from '../schema-compiler/schema-to-zod.js';
 import { getValueByPath, setValueByPath, deleteByPath, parsePath } from '../../shared/path-utils.js';
-import { fillPatchValueForSchemaPath } from './patch-value-fill.js';
+import { fillPatchValueForSchemaPath, getSchemaNodeForPath, isFieldOptional, getDefaultValue } from './patch-value-fill.js';
 import type { PatchInstruction, UpdateResult } from '../../types/index.js';
 import type { CompiledSchema } from '../schema-compiler/index.js';
 import * as notify from '../notification.js';
@@ -108,9 +108,11 @@ function applyInstruction(
 ): boolean {
   const { op, path, value } = instruction;
 
+  const oldValue = getValueByPath(data, path);
+
   const valueForWrite =
     schema?.raw && value !== undefined && (op === 'replace' || op === 'insert')
-      ? fillPatchValueForSchemaPath(schema.raw, path, value)
+      ? fillPatchValueForSchemaPath(schema.raw, path, value, op, op === 'replace' ? oldValue : undefined)
       : value;
 
   switch (op) {
@@ -139,8 +141,8 @@ function applyInstruction(
       }
 
       // 检查路径是否已存在（insert 不覆盖已有值）
-      const existing = getValueByPath(data, path);
-      if (existing !== undefined) {
+      const existingInsert = getValueByPath(data, path);
+      if (existingInsert !== undefined) {
         return false; // 已存在，insert 失败
       }
       setValueByPath(data, path, valueForWrite);
@@ -148,6 +150,15 @@ function applyInstruction(
     }
 
     case 'delete': {
+      // 非可选字段：替换为 $default 而非真删
+      if (schema?.raw) {
+        const schemaNode = getSchemaNodeForPath(schema.raw, path);
+        if (schemaNode && !isFieldOptional(schemaNode)) {
+          const def = getDefaultValue(schemaNode);
+          setValueByPath(data, path, def !== undefined ? def : null);
+          return true;
+        }
+      }
       return deleteByPath(data, path);
     }
 

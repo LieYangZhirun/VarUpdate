@@ -105,10 +105,12 @@ describe('schema-to-zod', () => {
       expect(validateWithSchema(schema, { nickname: '英雄' }, mockContext()).success).toBe(true);
     });
 
-    it('$default → .default(value)', () => {
+    it('$default → 不在 Zod 层自动填充，由应用层按上下文处理', () => {
       const schema = compileSchema({ status: { $type: 'string', $default: '正常' } });
-      // 缺少字段时用默认值（Zod 的 .default() 行为）
-      expect(validateWithSchema(schema, {}, mockContext()).success).toBe(true);
+      // 缺少字段时 Zod 不自动填充：字段仍为必填，缺失则校验失败
+      expect(validateWithSchema(schema, {}, mockContext()).success).toBe(false);
+      // 有值时正常通过
+      expect(validateWithSchema(schema, { status: '正常' }, mockContext()).success).toBe(true);
     });
 
     it('$regex → 正则校验', () => {

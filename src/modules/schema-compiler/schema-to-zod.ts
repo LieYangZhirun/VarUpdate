@@ -167,8 +167,9 @@ function compileNode(node: any, path: string): z.ZodType<any> {
   if (typeof node !== 'object' || node === null) return z.literal(node);
   if (node.$type !== undefined) return compileTypedNode(node, path);
 
-  // 无 $type → 隐式 object
-  return compileObjectShape(node, path);
+  // 无 $type → 隐式 object，编译子字段后仍需处理 $optional、$hide 等约束
+  const shape = compileObjectShape(node, path);
+  return applyConstraints(shape, node, path);
 }
 
 /**
@@ -303,7 +304,8 @@ function applyConstraints(baseType: z.ZodType<any>, node: Record<string, any>, p
         if (value === true) t = t.optional() as any;
         break;
       case '$default':
-        t = t.default(value) as any;
+        // $default 值保留在 raw Schema 中，由应用层按操作上下文（insert/replace/delete）手动填充。
+        // 不通过 Zod .default() 自动回填，避免校验时无差别地填入默认值。
         break;
       case '$hide':
         // 仅用于 VarUpdate 宏导出裁剪，不参与 Zod
