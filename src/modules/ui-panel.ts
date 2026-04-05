@@ -55,7 +55,7 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
   <!-- 左列：世界书与消息指令 -->
   <div style="flex: 1;">
     <h3 style="margin-top: 0; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">1. 世界书声明 (基础设置)</h3>
-    无论是 Schema 还是 Default，均支持 JSON、YAML、TOML 三种格式的解析。<span style="color:var(--SmartThemeHintColor, #888);">为了防止污染提示词，请在世界书管理界面将其设为“禁用”，脚本解析仍能够解析。</span><br>
+    Schema 支持 JSON、YAML、TOML 三种格式的解析。<span style="color:var(--SmartThemeHintColor, #888);">为了防止污染提示词，请在世界书管理界面将其设为"禁用"，脚本解析仍能够解析。</span><br>
 
     <p><b>1.1 格式定义 [Var_Schema]</b><br>
     在世界书的条目标题中加入 <code>[Var_Schema]</code>标签，使用专有语法定义变量的结构和校验规则。脚本会自动将其编译为 Zod 代码执行。</p>
@@ -136,9 +136,6 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
       </tr>
     </table>
 
-    <p style="margin-top: 15px;"><b>1.2 默认底值 [Var_Default]</b><br>
-    在世界书的条目标题中加入<code>[Var_Default]</code>标签，集中定义路径级默认值以覆盖Schema中已有的<code>$default</code>。<code>[Var_Default]</code> 路径值 &gt; 父节点/引用者 <code>$default</code> &gt; 子节点/被引用者 <code>$default</code>。同一结构体在不同路径被引用时，各引用者可独立定义该路径下的默认值而不影响被引用者。当<code>&lt;Var_Initial&gt;</code>定义的初始变量有遗漏或Update指令缺失字段时，脚本会使用默认值自动填充。<br>
-    
     <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">2. 消息流指令 (AI 或玩家输出)</h3>
 
     <p><b>2.1 初始化 &lt;Var_Initial&gt;</b><br>
@@ -155,7 +152,7 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     <div style="margin-top: 20px; padding: 12px; background: var(--blackA70, rgba(0,0,0,0.1)); border: 1px dashed var(--SmartThemeBorderColor, #ccc); border-radius: 6px; text-align: center;">
       <p style="margin: 0 0 8px 0; font-size: 0.95em;">📚 <b>查看完整的配套示例包</b></p>
       <div style="font-size: 0.85em; color: var(--SmartThemeHintColor, #ccc); margin-bottom: 10px;">
-        点击下方链接获取完整示例包，包含一组轻量Galgame风的 Schema / Default / Initial / Update 模板。
+        点击下方链接获取完整示例包，包含一组轻量Galgame风的 Schema / Initial / Update 模板。
       </div>
       
       <a href="https://github.com/LieYangZhirun/VarUpdate/tree/main/examples" target="_blank" rel="noopener noreferrer" title="VarUpdate 仓库 · examples 目录" style="display: inline-block; color: var(--SmartThemeBodyColor, #fff); background: #24292e; padding: 4px 10px; border-radius: 4px; text-decoration: none; font-size: 0.85em;">

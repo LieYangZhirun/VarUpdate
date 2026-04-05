@@ -2,12 +2,11 @@
  * shared/schema-defaults.ts
  *
  * $default 默认值相关工具集：
- * - enrichSchemaWithDefaults：将 [Var_Default] 的值注入 Schema 的 $default 字段
  * - fillDefaultsForValue：按 insert / replace 上下文为变量值填充默认值
  * - getDefaultValue / isFieldOptional：辅助读取 Schema 节点属性
  *
  * $default 优先级（高→低）：
- *   [Var_Default] 路径值 > 父节点/引用点 $default > 结构体自身 $default > null
+ *   父节点/引用点 $default > 结构体自身 $default > null
  *   同一结构体在不同路径被引用时，各引用点可定义独立的覆盖层，不修改结构体本身。
  */
 
@@ -147,62 +146,6 @@ function resolveUnionBranch(
 function cloneDeep<T>(obj: T): T {
   if (obj === null || obj === undefined || typeof obj !== 'object') return obj;
   return JSON.parse(JSON.stringify(obj));
-}
-
-// ═══════════════════════════════════════════
-//  enrichSchemaWithDefaults
-// ═══════════════════════════════════════════
-
-/**
- * 将 [Var_Default] 中的值注入 Schema 的 $default 字段。
- *
- * - **覆盖**：[Var_Default] 优先级高于 Schema 中已有的 $default，始终覆盖
- * - **仅主结构**：不进入 $defs 定义的结构体内部
- * - 返回新对象，不修改原 Schema
- *
- * 映射规则：
- * - Schema 节点为 object（含隐式 object）且 defaults 值也是 object：递归进入子字段
- * - Schema 节点为叶类型或容器类型（array/record）：将 defaults 值设为 $default
- */
-export function enrichSchemaWithDefaults(
-  schemaRaw: Record<string, any>,
-  defaults: Record<string, any>,
-): Record<string, any> {
-  const result = cloneDeep(schemaRaw);
-  enrichRecursive(result, defaults, result);
-  return result;
-}
-
-function enrichRecursive(
-  schemaNode: Record<string, any>,
-  defaultNode: Record<string, any>,
-  schemaRaw: Record<string, any>,
-): void {
-  for (const [key, defValue] of Object.entries(defaultNode)) {
-    if (key.startsWith('$') || key === '$defs') continue;
-    if (!(key in schemaNode)) continue;
-
-    const child = schemaNode[key];
-    if (child === null || typeof child !== 'object') continue;
-
-    // 判断 Schema 子节点是否为 object 形状（含隐式 object）
-    const childFieldKeys = collectFieldKeys(child);
-    const typeStr = typeof child.$type === 'string' ? child.$type.trim().toLowerCase() : null;
-    const isObjectNode =
-      childFieldKeys.length > 0 ||
-      typeStr === 'object';
-
-    if (
-      isObjectNode &&
-      typeof defValue === 'object' && defValue !== null && !Array.isArray(defValue)
-    ) {
-      // Schema 子节点为 object，defaults 值也为 object：递归进入子字段
-      enrichRecursive(child, defValue, schemaRaw);
-    } else {
-      // 叶类型 / 容器类型（array/record）：[Var_Default] 始终覆盖
-      child.$default = cloneDeep(defValue);
-    }
-  }
 }
 
 // ═══════════════════════════════════════════

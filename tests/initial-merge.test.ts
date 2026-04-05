@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mergeDeepWithConflictCheck, MergeConflictError } from '../src/shared/merge-deep-conflict';
 
 /**
- * Var_Initial 多条合并策略与世界书 Var_Schema / Var_Default 一致
+ * Var_Initial 多条合并策略与世界书 Var_Schema 一致
  */
 describe('Var_Initial 深度合并', () => {
   it('多条键不重叠 → 合并为一对象', () => {

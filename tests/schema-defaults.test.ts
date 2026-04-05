@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  enrichSchemaWithDefaults,
   fillDefaultsForValue,
   getDefaultValue,
   isFieldOptional,
@@ -21,84 +20,6 @@ describe('schema-defaults', () => {
       expect(isFieldOptional({ $type: 'string', $optional: true })).toBe(true);
       expect(isFieldOptional({ $type: 'string' })).toBe(false);
       expect(isFieldOptional(null)).toBeFalsy();
-    });
-  });
-
-  // ═══════════════════════════════════════════
-  //  enrichSchemaWithDefaults
-  // ═══════════════════════════════════════════
-  describe('enrichSchemaWithDefaults', () => {
-    it('补全 Schema 中缺失的 $default', () => {
-      const schema = {
-        HP: { $type: 'number' },
-        MP: { $type: 'number' },
-      };
-      const defaults = { HP: 100, MP: 50 };
-      const result = enrichSchemaWithDefaults(schema, defaults);
-      expect(result.HP.$default).toBe(100);
-      expect(result.MP.$default).toBe(50);
-    });
-
-    it('[Var_Default] 覆盖已有的 $default', () => {
-      const schema = {
-        HP: { $type: 'number', $default: 200 },
-      };
-      const defaults = { HP: 100 };
-      const result = enrichSchemaWithDefaults(schema, defaults);
-      expect(result.HP.$default).toBe(100);  // [Var_Default] 覆盖
-    });
-
-    it('递归进入 object 子字段', () => {
-      const schema = {
-        角色: {
-          $type: 'object',
-          HP: { $type: 'number' },
-          名称: { $type: 'string', $default: '无名' },
-        },
-      };
-      const defaults = { 角色: { HP: 100, 名称: '勇者' } };
-      const result = enrichSchemaWithDefaults(schema, defaults);
-      expect(result.角色.HP.$default).toBe(100);
-      expect(result.角色.名称.$default).toBe('勇者');  // [Var_Default] 覆盖
-    });
-
-    it('隐式 object（无 $type）递归进入', () => {
-      const schema = {
-        角色: {
-          HP: { $type: 'number' },
-        },
-      };
-      const defaults = { 角色: { HP: 50 } };
-      const result = enrichSchemaWithDefaults(schema, defaults);
-      expect(result.角色.HP.$default).toBe(50);
-    });
-
-    it('array/record 类型直接设 $default', () => {
-      const schema = {
-        背包: { $type: 'array<物品>' },
-        城市: { $type: 'record<地点>' },
-      };
-      const defaults = {
-        背包: [],
-        城市: { 驿站: { 描述: '商旅中转' } },
-      };
-      const result = enrichSchemaWithDefaults(schema, defaults);
-      expect(result.背包.$default).toEqual([]);
-      expect(result.城市.$default).toEqual({ 驿站: { 描述: '商旅中转' } });
-    });
-
-    it('跳过 defaults 中 Schema 中不存在的键', () => {
-      const schema = { HP: { $type: 'number' } };
-      const defaults = { HP: 100, 不存在的字段: 42 };
-      const result = enrichSchemaWithDefaults(schema, defaults);
-      expect(result.HP.$default).toBe(100);
-      expect(result).not.toHaveProperty('不存在的字段');
-    });
-
-    it('不修改原 Schema', () => {
-      const schema = { HP: { $type: 'number' } };
-      enrichSchemaWithDefaults(schema, { HP: 100 });
-      expect(schema.HP).not.toHaveProperty('$default');
     });
   });
 

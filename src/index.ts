@@ -31,7 +31,7 @@ import { registerFilterHooks, unregisterFilterHooks } from './modules/native-fil
 import { sanitizeMessageIndexForWrite } from './shared/message-index.js';
 import { getValueByPath } from './shared/path-utils.js';
 import { mergeDeepWithConflictCheck, MergeConflictError } from './shared/merge-deep-conflict.js';
-import { enrichSchemaWithDefaults, fillDefaultsForValue } from './shared/schema-defaults.js';
+import { fillDefaultsForValue } from './shared/schema-defaults.js';
 import type { ExtractedTag, MessageCompletePayload } from './types/index.js';
 // z（Zod）由酒馆助手注入到 iframe 全局，无需 import
 
@@ -656,23 +656,22 @@ async function autoRecoverIfNeeded(): Promise<void> {
 }
 
 // ═══════════════════════════════════════════
-//  Schema / Default 管理
+//  Schema 管理
 // ═══════════════════════════════════════════
 
 /**
- * 从世界书扫描 [Var_Schema] 和 [Var_Default] 条目
+ * 从世界书扫描 [Var_Schema] 条目
  *
- * chat 层键名：schema / default / schemaStatus（接口与契约 4.2）。
+ * chat 层键名：schema / schemaStatus（接口与契约 4.2）。
  *
  * @param opts.expectLorebook 为 true 时（如用户点击「重新加载格式规则」）：无角色卡/无主世界书视为失败并 warning；否则仅 debug 跳过（初始化/切聊天等）。
  * @returns 是否未出现阻塞性错误（解析/合并/编译失败则为 false）
  */
-async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boolean }): Promise<boolean> {
+async function loadSchemaFromWorldBook(opts?: { expectLorebook?: boolean }): Promise<boolean> {
   const chatData = readVariables('chat');
   let ok = true;
 
   const announceSchemaOk = (msg: string) => notify.debug('Schema', msg, { category: 'sch' });
-  const announceDefaultOk = (msg: string) => notify.debug('Default', msg, { category: 'wb' });
 
   try {
     const lorebookName = tryGetCurrentCharPrimaryLorebookName();
@@ -680,7 +679,7 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
       if (opts?.expectLorebook) {
         notify.warning(
           '格式规则',
-          '未打开角色卡或未绑定主世界书，无法从世界书加载 [Var_Schema] / [Var_Default]。',
+          '未打开角色卡或未绑定主世界书，无法从世界书加载 [Var_Schema]。',
           { category: 'wb' },
         );
       } else {
@@ -702,16 +701,12 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
     }
 
     const schemaTagged: LoreTaggedBody[] = [];
-    const defaultTagged: LoreTaggedBody[] = [];
 
     for (const entry of entries) {
       const comment: string = entry.comment || '';
       const raw = String((entry as { content?: unknown }).content ?? '');
       if (comment.includes('[Var_Schema]')) {
         schemaTagged.push({ comment, body: extractLorebookBody(raw) });
-      }
-      if (comment.includes('[Var_Default]')) {
-        defaultTagged.push({ comment, body: extractLorebookBody(raw) });
       }
     }
 
@@ -755,52 +750,9 @@ async function loadSchemaAndDefaultFromWorldBook(opts?: { expectLorebook?: boole
       }
     }
 
-    // ── Default 解析（须在 Schema 编译之前完成，以便合并 $default） ──
-    let mergedDefault: Record<string, any> | null = null;
-    try {
-      for (const { comment, body } of defaultTagged) {
-        const trimmed = body.trim();
-        if (!trimmed) continue;
-        try {
-          const obj = parseStructuredText(trimmed);
-          mergedDefault = mergedDefault ? mergeDeepWithConflictCheck(mergedDefault, obj) : obj;
-        } catch (e) {
-          if (e instanceof FormatParseError) {
-            ok = false;
-            notify.error(
-              'Default 条目无法解析',
-              `世界书「${lorebookName}」\n备注含 [Var_Default] 的条目：${comment.slice(0, 80)}${comment.length > 80 ? '…' : ''}\n\n${formatParseErrorDetails(e)}`,
-              { category: 'wb' },
-            );
-            mergedDefault = null;
-            break;
-          }
-          throw e;
-        }
-      }
-    } catch (e) {
-      if (e instanceof MergeConflictError) {
-        ok = false;
-        notify.error('Default 合并冲突', `${(e as MergeConflictError).message}（路径: ${(e as MergeConflictError).path}）`, { category: 'wb' });
-        mergedDefault = null;
-      } else {
-        ok = false;
-        notify.error('世界书 / Default', errorMessageFromUnknown(e), { category: 'wb' });
-        mergedDefault = null;
-      }
-    }
 
-    if (mergedDefault) {
-      const n = defaultTagged.filter(t => t.body.trim()).length;
-      announceDefaultOk(`已加载 ${Object.keys(mergedDefault).length} 个顶层键（${n} 条合并），已合并至 Schema $default`);
-    }
-
-    // ── Schema 编译（含 Default 合并） ──
+    // ── Schema 编译 ──
     if (mergedSchema) {
-      // [Var_Default] 的值补全到 Schema 的 $default（仅主结构，不进 $defs）
-      if (mergedDefault) {
-        mergedSchema = enrichSchemaWithDefaults(mergedSchema, mergedDefault);
-      }
       try {
         const compiled = compileSchemaFromData(mergedSchema);
         chatData.schema = compiled.raw;
@@ -843,7 +795,7 @@ async function loadSchema(): Promise<void> {
       return;
     }
     // 含 schemaStatus===compiled 但缺 schema 等异常态，统一走世界书重载
-    await loadSchemaAndDefaultFromWorldBook();
+    await loadSchemaFromWorldBook();
   } catch (e) {
     notify.error('Schema 加载失败', errorMessageFromUnknown(e), { category: 'sch' });
   }
@@ -853,7 +805,7 @@ async function loadSchema(): Promise<void> {
 //  手动操作回调
 // ═══════════════════════════════════════════
 
-/** 面板「重新加载格式规则」：清空编译缓存并从世界书重载 Schema / Default。 */
+/** 面板「重新加载格式规则」：清空编译缓存并从世界书重载 Schema。 */
 async function handleReloadRules(): Promise<void> {
   notify.debug('手动操作', '重新加载格式规则', { category: 'man' });
   clearCache();
@@ -861,9 +813,9 @@ async function handleReloadRules(): Promise<void> {
   delete chatData.schema;
   chatData.schemaStatus = 'not_loaded';
   writeVariables('chat', chatData);
-  const ok = await loadSchemaAndDefaultFromWorldBook({ expectLorebook: true });
+  const ok = await loadSchemaFromWorldBook({ expectLorebook: true });
   if (ok) {
-    notify.feedback(true, '格式规则', '已从世界书重新加载 [Var_Schema] / [Var_Default]');
+    notify.feedback(true, '格式规则', '已从世界书重新加载 [Var_Schema]');
   } else {
     notify.feedback(
       false,
