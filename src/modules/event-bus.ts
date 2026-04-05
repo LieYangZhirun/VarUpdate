@@ -122,4 +122,5 @@ export const EVENTS = {
   MESSAGE_DELETED: 'message_deleted',
   WORLDINFO_SCAN_DONE: 'worldinfo_scan_done',
   SENDING_MESSAGE: 'sending_message',
+  MESSAGE_SENT: 'message_sent',
 } as const;
