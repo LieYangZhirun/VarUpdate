@@ -39,13 +39,13 @@ describe('schema-defaults', () => {
       expect(result.MP.$default).toBe(50);
     });
 
-    it('不覆盖已有的 $default', () => {
+    it('[Var_Default] 覆盖已有的 $default', () => {
       const schema = {
         HP: { $type: 'number', $default: 200 },
       };
       const defaults = { HP: 100 };
       const result = enrichSchemaWithDefaults(schema, defaults);
-      expect(result.HP.$default).toBe(200);  // 保持原值
+      expect(result.HP.$default).toBe(100);  // [Var_Default] 覆盖
     });
 
     it('递归进入 object 子字段', () => {
@@ -59,7 +59,7 @@ describe('schema-defaults', () => {
       const defaults = { 角色: { HP: 100, 名称: '勇者' } };
       const result = enrichSchemaWithDefaults(schema, defaults);
       expect(result.角色.HP.$default).toBe(100);
-      expect(result.角色.名称.$default).toBe('无名');  // 不被覆盖
+      expect(result.角色.名称.$default).toBe('勇者');  // [Var_Default] 覆盖
     });
 
     it('隐式 object（无 $type）递归进入', () => {
@@ -307,7 +307,7 @@ describe('schema-defaults', () => {
       expect(result.状态).toBe('正常'); // 从父 $default 获取
     });
 
-    it('子字段自身 $default 优先于父 $default', () => {
+    it('父 $default 优先于子字段自身 $default', () => {
       const schema = {
         $type: 'object',
         $default: { HP: 100, MP: 50 },
@@ -315,7 +315,7 @@ describe('schema-defaults', () => {
         MP: { $type: 'number' },
       };
       const result = fillDefaultsForValue({}, schema, schema, { mode: 'insert' });
-      expect(result.HP).toBe(999);   // 子 $default 优先
+      expect(result.HP).toBe(100);   // 父 $default 优先
       expect(result.MP).toBe(50);    // 无子 $default，用父 $default
     });
 
@@ -331,7 +331,7 @@ describe('schema-defaults', () => {
       expect(result.MP).toBe(50);    // 缺失字段从父 $default 获取
     });
 
-    it('replace 模式下，父 $default 在旧值和子 $default 之后', () => {
+    it('replace 模式下优先级：旧值 > 父 $default > 子 $default', () => {
       const schema = {
         $type: 'object',
         $default: { HP: 100, MP: 50, SP: 30 },
@@ -345,7 +345,7 @@ describe('schema-defaults', () => {
         schema,
         { mode: 'replace', oldValue: { MP: 80 } },
       );
-      expect(result.HP).toBe(999);   // 子 $default
+      expect(result.HP).toBe(100);   // 父 $default 优先于子 $default
       expect(result.MP).toBe(80);    // 旧值恢复
       expect(result.SP).toBe(30);    // 父 $default
     });
