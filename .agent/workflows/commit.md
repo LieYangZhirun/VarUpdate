@@ -22,7 +22,7 @@ npm test
 
 3. **更新版本号和使用指南**
 
-修改`version.ts`，如果有功能更新还需要对`ui-panel.ts`中的相关描述进行修改
+修改`version.ts`和`package.json`中的版本号，并且如果有功能更新还需要对`ui-panel.ts`中的相关描述进行修改
 
 4. **构建 bundle**
 ```
