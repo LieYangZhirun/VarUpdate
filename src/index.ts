@@ -197,11 +197,28 @@ function bindEvents(): void {
   });
 
   eventBus.on(eventBus.EVENTS.MESSAGE_RECEIVED, (messageIndex: number, reason?: string) => {
-    if (isAgentsActive) return;
-    // 双通道去重：管道标志未及时更新时，仍避免与 `message_complete` 重复处理
-    if (Date.now() - lastAgentsMessageCompleteAt < 400) return;
     const rawIdx = messageIndex as unknown;
     const idx = sanitizeMessageIndexForWrite(rawIdx);
+
+    // Agents 管道活跃时，AI 消息由 MESSAGE_COMPLETE 接管；
+    // 但用户消息只有 MESSAGE_RECEIVED，仍需在此继承变量，
+    // 否则条件过滤器在 WORLDINFO_SCAN_DONE 时读到空数据。
+    if (isAgentsActive) {
+      if (idx !== undefined) {
+        try {
+          const context = (globalThis as any).SillyTavern?.getContext?.();
+          const message = context?.chat?.[idx];
+          if (message?.is_user) {
+            inheritVariables(idx);
+          }
+        } catch { /* 静默 */ }
+      }
+      return;
+    }
+
+    // 双通道去重：管道标志未及时更新时，仍避免与 `message_complete` 重复处理
+    if (Date.now() - lastAgentsMessageCompleteAt < 400) return;
+
     if (idx === undefined) {
       notifyIgnoredInvalidMessageIndex('宿主新消息', rawIdx);
       return;
