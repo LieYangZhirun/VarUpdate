@@ -5,6 +5,10 @@
  * - enrichSchemaWithDefaults：将 [Var_Default] 的值注入 Schema 的 $default 字段
  * - fillDefaultsForValue：按 insert / replace 上下文为变量值填充默认值
  * - getDefaultValue / isFieldOptional：辅助读取 Schema 节点属性
+ *
+ * $default 优先级（高→低）：
+ *   [Var_Default] 路径值 > 父节点/引用点 $default > 结构体自身 $default > null
+ *   同一结构体在不同路径被引用时，各引用点可定义独立的覆盖层，不修改结构体本身。
  */
 
 const ARRAY_TYPE_RE = /^array<(.+)>$/i;
@@ -152,7 +156,7 @@ function cloneDeep<T>(obj: T): T {
 /**
  * 将 [Var_Default] 中的值注入 Schema 的 $default 字段。
  *
- * - **补全**：Schema 中已有 $default 的字段不被覆盖
+ * - **覆盖**：[Var_Default] 优先级高于 Schema 中已有的 $default，始终覆盖
  * - **仅主结构**：不进入 $defs 定义的结构体内部
  * - 返回新对象，不修改原 Schema
  *
@@ -195,10 +199,8 @@ function enrichRecursive(
       // Schema 子节点为 object，defaults 值也为 object：递归进入子字段
       enrichRecursive(child, defValue, schemaRaw);
     } else {
-      // 叶类型 / 容器类型（array/record）：补全 $default
-      if (!Object.prototype.hasOwnProperty.call(child, '$default')) {
-        child.$default = cloneDeep(defValue);
-      }
+      // 叶类型 / 容器类型（array/record）：[Var_Default] 始终覆盖
+      child.$default = cloneDeep(defValue);
     }
   }
 }
@@ -212,10 +214,19 @@ export interface FillDefaultsOptions {
   mode: 'insert' | 'replace';
   /** replace 模式时的旧值（用于保留旧字段） */
   oldValue?: any;
+  /**
+   * 引用点覆盖层：由上层引用点的 $default 模板提供。
+   * 同一结构体在不同路径被引用时，各引用点可通过此参数传递独立的覆盖默认值，
+   * 优先级高于结构体自身的 $default，但不修改结构体定义。
+   */
+  defaultOverrides?: Record<string, any> | null;
 }
 
 /**
  * 按 Schema 定义为变量值填充缺失字段的 $default 值。
+ *
+ * $default 优先级（高→低）：
+ *   引用点覆盖层(defaultOverrides) > 父节点 $default > 结构体自身 $default > null
  *
  * **insert 模式**（Initial 和 insert 指令）：
  * - 所有有 $default 的缺失字段均填充，**包括 $optional 字段**
@@ -227,12 +238,7 @@ export interface FillDefaultsOptions {
  * - 无旧值且可选：不填
  *
  * 支持递归进入 object 子字段、array 元素、record 值。
- *
- * @param value 待填充的值（深拷贝后操作，不修改原值）
- * @param schemaNode 对应的 Schema 节点
- * @param schemaRaw 整份 Schema 原文（用于解析 $defs 引用）
- * @param opts 操作选项
- * @returns 填充后的新值
+ * record/array 引用结构体时，引用点的 $default 模板会作为覆盖层传递给被引用结构体。
  */
 export function fillDefaultsForValue(
   value: any,
@@ -269,6 +275,9 @@ export function fillDefaultsForValue(
     parentDefault && typeof parentDefault === 'object' && !Array.isArray(parentDefault)
   ) ? parentDefault : null;
 
+  // 引用点覆盖层（由上层 record/array 引用传入）
+  const overrides = opts.defaultOverrides ?? null;
+
   for (const key of collectFieldKeys(shape)) {
     const childSchema = shape[key];
     if (typeof childSchema !== 'object' || childSchema === null) continue;
@@ -276,34 +285,36 @@ export function fillDefaultsForValue(
     const optional = isFieldOptional(childSchema);
     const hasDefault = Object.prototype.hasOwnProperty.call(childSchema, '$default');
     const hasParentDefault = parentDefObj && Object.prototype.hasOwnProperty.call(parentDefObj, key);
+    const hasOverride = overrides && Object.prototype.hasOwnProperty.call(overrides, key);
 
     // ── 字段缺失时的填充逻辑 ──
-    // 优先级：子 $default > 父 $default > [Var_Default]（已合入子 $default）> null
+    // 优先级：引用点覆盖 > 父 $default > 子 $default > null
     if (!Object.prototype.hasOwnProperty.call(result, key)) {
       if (opts.mode === 'insert') {
-        // insert / Initial：有 $default 就填（含 optional），无 $default 且非可选填 null
-        if (hasDefault) {
-          result[key] = cloneDeep(childSchema.$default);
+        if (hasOverride) {
+          result[key] = cloneDeep(overrides![key]);
         } else if (hasParentDefault) {
-          result[key] = cloneDeep(parentDefObj[key]);
+          result[key] = cloneDeep(parentDefObj![key]);
+        } else if (hasDefault) {
+          result[key] = cloneDeep(childSchema.$default);
         } else if (!optional) {
           result[key] = null;
         }
       } else {
-        // replace：先尝试从旧值恢复；无旧值的非可选字段用 $default 兜底
+        // replace：先尝试从旧值恢复
         if (oldObj && Object.prototype.hasOwnProperty.call(oldObj, key)) {
           result[key] = cloneDeep(oldObj[key]);
         } else if (!optional) {
-          // 非可选字段：子 $default → 父 $default → null
-          if (hasDefault) {
-            result[key] = cloneDeep(childSchema.$default);
+          if (hasOverride) {
+            result[key] = cloneDeep(overrides![key]);
           } else if (hasParentDefault) {
-            result[key] = cloneDeep(parentDefObj[key]);
+            result[key] = cloneDeep(parentDefObj![key]);
+          } else if (hasDefault) {
+            result[key] = cloneDeep(childSchema.$default);
           } else {
             result[key] = null;
           }
         }
-        // 可选字段无旧值：不填（保持缺失）
       }
     }
 
@@ -326,9 +337,13 @@ export function fillDefaultsForValue(
           const arrMatch = typeStr.trim().match(ARRAY_TYPE_RE);
           if (arrMatch) {
             const elemSchema = resolveTypeToSchemaNode(schemaRaw, arrMatch[1]);
+            const elemOverrides = extractTemplateFromDefault(childSchema);
             for (let i = 0; i < childVal.length; i++) {
               if (childVal[i] !== null && typeof childVal[i] === 'object' && !Array.isArray(childVal[i])) {
-                childVal[i] = fillDefaultsForValue(childVal[i], elemSchema, schemaRaw, { mode: 'insert' });
+                childVal[i] = fillDefaultsForValue(childVal[i], elemSchema, schemaRaw, {
+                  mode: 'insert',
+                  defaultOverrides: elemOverrides,
+                });
               }
             }
           }
@@ -342,10 +357,14 @@ export function fillDefaultsForValue(
           const recMatch = typeStr.trim().match(RECORD_TYPE_RE);
           if (recMatch) {
             const valSchema = resolveTypeToSchemaNode(schemaRaw, recMatch[1]);
+            const recOverrides = extractTemplateFromDefault(childSchema);
             for (const recKey of Object.keys(childVal)) {
               const recVal = childVal[recKey];
               if (recVal !== null && typeof recVal === 'object' && !Array.isArray(recVal)) {
-                childVal[recKey] = fillDefaultsForValue(recVal, valSchema, schemaRaw, { mode: 'insert' });
+                childVal[recKey] = fillDefaultsForValue(recVal, valSchema, schemaRaw, {
+                  mode: 'insert',
+                  defaultOverrides: recOverrides,
+                });
               }
             }
           }
@@ -355,4 +374,31 @@ export function fillDefaultsForValue(
   }
 
   return result;
+}
+
+/**
+ * 从 record/array 字段的 $default 模板中提取结构体字段的覆盖值。
+ *
+ * record 的 $default 形如 `{ "{{键名}}": { 字段A: 值, 字段B: 值 } }`，
+ * 取第一个条目的值对象作为覆盖层传给被引用结构体的 fillDefaults。
+ * array 的 $default 形如 `[{ 字段A: 值 }]`，取第一个元素。
+ */
+function extractTemplateFromDefault(schemaNode: any): Record<string, any> | null {
+  const def = getDefaultValue(schemaNode);
+  if (def === null || def === undefined) return null;
+
+  // record: $default 是一个 object，取第一个 value
+  if (typeof def === 'object' && !Array.isArray(def)) {
+    const values = Object.values(def);
+    if (values.length > 0 && typeof values[0] === 'object' && values[0] !== null && !Array.isArray(values[0])) {
+      return values[0] as Record<string, any>;
+    }
+  }
+
+  // array: $default 是一个数组，取第一个元素
+  if (Array.isArray(def) && def.length > 0 && typeof def[0] === 'object' && def[0] !== null) {
+    return def[0] as Record<string, any>;
+  }
+
+  return null;
 }

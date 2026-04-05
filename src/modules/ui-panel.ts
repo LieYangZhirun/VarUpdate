@@ -137,7 +137,7 @@ const HELP: Record<string, { title: string; content: string; wide?: boolean; lar
     </table>
 
     <p style="margin-top: 15px;"><b>1.2 默认底值 [Var_Default]</b><br>
-    在世界书的条目标题中加入 <code>[Var_Default]</code>标签，集中定义各字段的默认底值对Schema的<code>$default</code>字段进行补全(不覆盖已有 <code>$default</code>）。当 <code>&lt;Var_Initial&gt;</code> 定义的初始变量有遗漏或Update指令缺失字段时，脚本会使用<code>$default</code>定义的默认值进行填充。<br>
+    在世界书的条目标题中加入<code>[Var_Default]</code>标签，集中定义路径级默认值以覆盖Schema中已有的<code>$default</code>。<code>[Var_Default]</code> 路径值 &gt; 父节点/引用者 <code>$default</code> &gt; 子节点/被引用者 <code>$default</code>。同一结构体在不同路径被引用时，各引用者可独立定义该路径下的默认值而不影响被引用者。当<code>&lt;Var_Initial&gt;</code>定义的初始变量有遗漏或Update指令缺失字段时，脚本会使用默认值自动填充。<br>
     
     <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">2. 消息流指令 (AI 或玩家输出)</h3>
 
