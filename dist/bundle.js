@@ -208,7 +208,7 @@ ${o}`,t);Xn(this,"line");Xn(this,"column");Xn(this,"codeblock");this.line=i,this
     \u901A\u8FC7 <code>{{message/log}}</code>\uFF0C\u4F60\u53EF\u4EE5\u5C06\u6700\u65B0\u697C\u5C42\u7684\u53D8\u91CF\u66F4\u65B0\u65E5\u5FD7\u5355\u72EC\u63D0\u53D6\u51FA\u6765\uFF08\u5982 <code>\u89D2\u8272/HP: 80 \u2192 75</code>\uFF09\u505A\u5355\u72EC\u5C55\u793A\u3002</p>
     
     <h3 style="margin-top: 20px; border-bottom: 1px solid var(--SmartThemeBorderColor, #ccc); padding-bottom: 6px;">4. \u53D8\u91CF\u6761\u4EF6\u6807\u7B7E (\u52A8\u6001\u5F00\u5173)</h3>
-    <p>\u5C06<code>[]</code>\u653E\u5728\u9884\u8BBE\u540D\u79F0\u3001\u4E16\u754C\u4E66\u5907\u6CE8\u3001\u6B63\u5219\u7B49\u540D\u5B57\u7684\u4E24\u8FB9\uFF0C<b>\u53EA\u6709\u91CC\u9762\u7684\u6761\u4EF6\u6210\u771F\u65F6\uFF0C\u8FD9\u6761\u8BBE\u5B9A\u624D\u4F1A\u88AB\u8BBE\u4E3A\u542F\u7528\u53D1\u9001</b>\u3002</p>
+    <p>\u5C06<code>[]</code>\u653E\u5728\u4E16\u754C\u4E66\u6761\u76EE\u7684<b>\u5907\u6CE8\uFF08comment\uFF09</b>\u5B57\u6BB5\u4E2D\uFF0C<b>\u53EA\u6709\u91CC\u9762\u7684\u6761\u4EF6\u6210\u771F\u65F6\uFF0C\u8FD9\u6761\u4E16\u754C\u4E66\u8BBE\u5B9A\u624D\u4F1A\u88AB\u6FC0\u6D3B\u53D1\u9001</b>\u3002</p>
 
     <p style="margin: 5px 0 2px 0; font-size: 0.9em;"><b>4.1 \u503C\u8FD0\u7B97</b> <span style="color:var(--SmartThemeHintColor, #888);">\uFF08\u652F\u6301\u9644\u5F55\u4E2D\u7684\u901A\u914D\u7B26\u89C4\u5219\uFF09</span></p>
     <table style="width: 100%; border-collapse: collapse; margin-top: 2px; font-size: 0.85em; text-align: left;">
