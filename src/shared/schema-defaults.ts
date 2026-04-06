@@ -36,6 +36,69 @@ function collectFieldKeys(obj: Record<string, any>): string[] {
 }
 
 /**
+ * 推断容器类型字段的零值。
+ *
+ * 当字段缺失、非 $optional、且无任何层级的 $default 可用时，
+ * 根据 $type 返回类型安全的空值（而非 null），使 Zod 校验通过：
+ *
+ * - `record<T>` + `$key_rule.$default` → `{ [keyDefault]: {} }`（模板条目，由后续递归填充结构体默认值）
+ * - `record<T>` → `{}`
+ * - `array<T>` → `[]`
+ * - `object` / 隐式 object / `$defs` 引用 → `{}`（由后续递归填充子字段）
+ * - 原始类型 → `null`（交给 Zod 校验捕获）
+ */
+function inferTypeZeroValue(childSchema: any, schemaRaw: Record<string, any>): any {
+  if (!childSchema || typeof childSchema !== 'object') return null;
+
+  const typeStr = childSchema.$type;
+
+  if (typeof typeStr === 'string') {
+    const trimmed = typeStr.trim();
+
+    // record<T>：检查 $key_rule.$default
+    if (RECORD_TYPE_RE.test(trimmed)) {
+      const keyRule = childSchema.$key_rule;
+      const keyDefault = keyRule?.$default;
+      if (typeof keyDefault === 'string' && keyDefault.length > 0) {
+        return { [keyDefault]: {} }; // 模板条目，值由后续 record 递归自动填充结构体默认值
+      }
+      return {}; // 无模板键名 → 空字典
+    }
+
+    // array<T>
+    if (ARRAY_TYPE_RE.test(trimmed)) {
+      return [];
+    }
+
+    // 显式 object
+    if (trimmed.toLowerCase() === 'object') {
+      return {}; // 由后续递归填充子字段
+    }
+
+    // $defs 引用（结构体名）→ 视为 object
+    const def = schemaRaw.$defs?.[trimmed];
+    if (def && typeof def === 'object') {
+      return {}; // 由后续递归填充结构体子字段
+    }
+  }
+
+  // union 类型（数组形式）
+  if (Array.isArray(typeStr)) {
+    return {}; // union 下至少一个分支应为 object 类型，后续 resolveUnionBranch 处理
+  }
+
+  // 无 $type 但有子字段 → 隐式 object
+  if (typeStr === undefined) {
+    const childKeys = collectFieldKeys(childSchema);
+    if (childKeys.length > 0) {
+      return {};
+    }
+  }
+
+  return null; // 原始类型无 $default → null，交给 Zod 校验捕获
+}
+
+/**
  * 将结构体类型名解析为 Schema 节点。
  * 基础类型返回 `{ $type: name }`；$defs 中存在的返回其定义。
  */
@@ -231,7 +294,7 @@ export function fillDefaultsForValue(
     const hasOverride = overrides && Object.prototype.hasOwnProperty.call(overrides, key);
 
     // ── 字段缺失时的填充逻辑 ──
-    // 优先级：引用点覆盖 > 父 $default > 子 $default > null
+    // 优先级：引用点覆盖 > 父 $default > 子 $default > 类型零值（容器类型）> null（原始类型）
     if (!Object.prototype.hasOwnProperty.call(result, key)) {
       if (opts.mode === 'insert') {
         if (hasOverride) {
@@ -241,7 +304,7 @@ export function fillDefaultsForValue(
         } else if (hasDefault) {
           result[key] = cloneDeep(childSchema.$default);
         } else if (!optional) {
-          result[key] = null;
+          result[key] = inferTypeZeroValue(childSchema, schemaRaw);
         }
       } else {
         // replace：先尝试从旧值恢复
@@ -255,7 +318,7 @@ export function fillDefaultsForValue(
           } else if (hasDefault) {
             result[key] = cloneDeep(childSchema.$default);
           } else {
-            result[key] = null;
+            result[key] = inferTypeZeroValue(childSchema, schemaRaw);
           }
         }
       }

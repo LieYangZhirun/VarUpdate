@@ -441,9 +441,11 @@ async function applyInitialMergedData(
     // Initial = insert 语义：按 Schema $default 全量填充缺失字段（含 $optional 字段）
     const schema = getCachedSchema();
     let filled = data;
+    const originalKeys = new Set(Object.keys(data));
     if (schema?.raw) {
       filled = fillDefaultsForValue(data, schema.raw, schema.raw, { mode: 'insert' });
     }
+    const supplementedKeys = Object.keys(filled).filter(k => !originalKeys.has(k));
 
     // Schema 校验 + force 类型转换
     let finalData = filled;
@@ -482,6 +484,12 @@ async function applyInitialMergedData(
 
     if (opts?.quiet) {
       notify.debug('变量初始化', `${Object.keys(finalData).length} 个顶层变量已初始化（静默）`, { category: 'msg' });
+    } else if (supplementedKeys.length > 0) {
+      notify.warning(
+        '变量初始化',
+        `${Object.keys(finalData).length} 个顶层变量已初始化，其中 ${supplementedKeys.length} 个由 Schema 默认值补全：${supplementedKeys.join('、')}`,
+        { category: 'msg' },
+      );
     } else {
       notify.success('变量初始化', `${Object.keys(finalData).length} 个顶层变量已初始化`, { category: 'msg' });
     }

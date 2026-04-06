@@ -293,4 +293,167 @@ describe('schema-defaults', () => {
       expect(result.标记).toBe(true);  // 有父 $default → 填充
     });
   });
+
+  // ═══════════════════════════════════════════
+  //  fillDefaultsForValue — 容器类型零值推断
+  // ═══════════════════════════════════════════
+  describe('fillDefaultsForValue — 容器类型零值推断', () => {
+    it('record 无 $default → 填充 {}', () => {
+      const schema = {
+        $defs: {
+          建筑: {
+            $type: 'object',
+            描述: { $type: 'string', $default: '{{建筑描述}}' },
+          },
+        },
+        城市地图: { $type: 'record<建筑>' },
+      };
+      const result = fillDefaultsForValue({}, schema, schema, { mode: 'insert' });
+      expect(result.城市地图).toEqual({});
+    });
+
+    it('array 无 $default → 填充 []', () => {
+      const schema = {
+        技能列表: { $type: 'array<string>' },
+      };
+      const result = fillDefaultsForValue({}, schema, schema, { mode: 'insert' });
+      expect(result.技能列表).toEqual([]);
+    });
+
+    it('object 无 $default → 填充 {} 并递归补全子字段', () => {
+      const schema = {
+        记忆系统: {
+          $type: 'object',
+          日记: { $type: 'record<string>' },
+          周志: { $type: 'record<string>' },
+        },
+      };
+      const result = fillDefaultsForValue({}, schema, schema, { mode: 'insert' });
+      expect(result.记忆系统).toEqual({ 日记: {}, 周志: {} });
+    });
+
+    it('$defs 引用类型缺失 → 填充 {} 并递归补全子字段', () => {
+      const schema = {
+        $defs: {
+          状态: {
+            $type: 'object',
+            HP: { $type: 'number', $default: 100 },
+            MP: { $type: 'number', $default: 50 },
+          },
+        },
+        角色状态: { $type: '状态' },
+      };
+      const result = fillDefaultsForValue({}, schema, schema, { mode: 'insert' });
+      expect(result.角色状态).toEqual({ HP: 100, MP: 50 });
+    });
+
+    it('replace 模式：record 无旧值无 $default → 填充 {}', () => {
+      const schema = {
+        势力: { $type: 'record<string>' },
+      };
+      const result = fillDefaultsForValue(
+        {},
+        schema,
+        schema,
+        { mode: 'replace', oldValue: {} },
+      );
+      expect(result.势力).toEqual({});
+    });
+
+    it('原始类型无 $default → 仍为 null', () => {
+      const schema = {
+        计数: { $type: 'number' },
+      };
+      const result = fillDefaultsForValue({}, schema, schema, { mode: 'insert' });
+      expect(result.计数).toBeNull();
+    });
+  });
+
+  // ═══════════════════════════════════════════
+  //  fillDefaultsForValue — $key_rule.$default 模板条目
+  // ═══════════════════════════════════════════
+  describe('fillDefaultsForValue — $key_rule.$default 模板条目', () => {
+    it('record 有 $key_rule.$default → 生成模板条目并填充结构体默认值', () => {
+      const schema = {
+        $defs: {
+          角色: {
+            $type: 'object',
+            HP: { $type: 'number', $default: 100 },
+            状态: { $type: 'string', $default: '正常' },
+          },
+        },
+        红颜知己: {
+          $type: 'record<角色>',
+          $key_rule: { $default: '{{角色名}}' },
+        },
+      };
+      const result = fillDefaultsForValue({}, schema, schema, { mode: 'insert' });
+      expect(result.红颜知己).toEqual({
+        '{{角色名}}': { HP: 100, 状态: '正常' },
+      });
+    });
+
+    it('record 有 $key_rule.$default 但已有值 → 不覆盖', () => {
+      const schema = {
+        $defs: {
+          角色: {
+            $type: 'object',
+            HP: { $type: 'number', $default: 100 },
+          },
+        },
+        红颜知己: {
+          $type: 'record<角色>',
+          $key_rule: { $default: '{{角色名}}' },
+        },
+      };
+      const input = { 红颜知己: { 小红: { HP: 80 } } };
+      const result = fillDefaultsForValue(input, schema, schema, { mode: 'insert' });
+      expect(result.红颜知己).toEqual({ 小红: { HP: 80 } });
+    });
+
+    it('$key_rule.$default 的值为空字符串 → 视为无模板，填充 {}', () => {
+      const schema = {
+        列表: {
+          $type: 'record<string>',
+          $key_rule: { $default: '' },
+        },
+      };
+      const result = fillDefaultsForValue({}, schema, schema, { mode: 'insert' });
+      expect(result.列表).toEqual({});
+    });
+
+    it('嵌套：object 内含 record + $key_rule.$default', () => {
+      const schema = {
+        $defs: {
+          记忆条目: {
+            $type: 'object',
+            内容: { $type: 'string', $default: '{{记录内容}}' },
+          },
+        },
+        记忆系统: {
+          $type: 'object',
+          日记: {
+            $type: 'record<记忆条目>',
+            $key_rule: {
+              $enum: ['第***日'],
+              $default: '{{第X日}}',
+            },
+          },
+          周志: {
+            $type: 'record<记忆条目>',
+            $key_rule: {
+              $enum: ['第***周'],
+            },
+          },
+        },
+      };
+      const result = fillDefaultsForValue({}, schema, schema, { mode: 'insert' });
+      // 日记有 $key_rule.$default → 模板条目
+      expect(result.记忆系统.日记).toEqual({
+        '{{第X日}}': { 内容: '{{记录内容}}' },
+      });
+      // 周志无 $key_rule.$default → 空字典
+      expect(result.记忆系统.周志).toEqual({});
+    });
+  });
 });
