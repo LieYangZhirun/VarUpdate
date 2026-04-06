@@ -354,14 +354,31 @@ function normalizePath(path: string): string {
 // ═══════════════════════════════════════════
 
 /**
- * 遍历解析后的对象树，将字符串值中 '...' 包裹的内容升级为 "..."
+ * 遍历解析后的对象树，将字符串值中被单引号包裹的「术语/标签」升级为双引号。
  *
  * 典型场景：AI 将 `"进化日"` 降级输出为 `'进化日'` 以避免 JSON 引号冲突。
  * 解析成功后在此恢复原始标点。
+ *
+ * 升级条件（满足任一即升级）：
+ * - 引号内含有 CJK 字符（中日韩统一表意文字）
+ * - 引号内为短标识符（≤20 字符且不含空白）
+ *
+ * 这可避免误改英文散文中的合法单引号（如 `it's a 'nice' day`）。
  */
 function upgradeSingleQuotesInValues(data: any): any {
   if (typeof data === 'string') {
-    return data.replace(/'([^']+)'/g, '"$1"');
+    return data.replace(/'([^']+)'/g, (_match, content: string) => {
+      // 含 CJK 字符 → 几乎确定是从双引号降级而来
+      if (/[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff00-\uffef]/.test(content)) {
+        return `"${content}"`;
+      }
+      // 短标识符（无空白、≤20 字符）→ 很可能是术语名
+      if (content.length <= 20 && !/\s/.test(content)) {
+        return `"${content}"`;
+      }
+      // 其他情况保留原始单引号
+      return _match;
+    });
   }
   if (Array.isArray(data)) {
     return data.map(item => upgradeSingleQuotesInValues(item));

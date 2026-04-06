@@ -95,14 +95,27 @@ const ORPHAN_MESSAGE_VAR_SWEEP = 2048;
 /**
  * SillyTavern `message_deleted` 传入的是**删除后**的 `chat.length`（见 script.js emit），
  * 不是被删消息的下标。有效下标为 0..length-1，需清空 length 及以上可能残留的 message 变量槽位。
+ *
+ * 增量探测：连续遇到 EMPTY_STREAK_LIMIT 个已经为空的槽位后提前退出，避免无意义的大量写入。
  */
 export function pruneOrphanMessageVariables(newChatLength: number): void {
   try {
     if (!Number.isFinite(newChatLength) || newChatLength < 0) return;
 
+    const EMPTY_STREAK_LIMIT = 10;
+    let emptyStreak = 0;
+
     const end = newChatLength + ORPHAN_MESSAGE_VAR_SWEEP;
     for (let i = newChatLength; i < end; i++) {
-      writeVariables('message', {}, i);
+      const existing = readVariables('message', i);
+      // 仅当槽位确实存有数据时才写空
+      if (existing.data !== undefined || existing.log !== undefined || existing.isInitPoint) {
+        writeVariables('message', {}, i);
+        emptyStreak = 0;
+      } else {
+        emptyStreak++;
+        if (emptyStreak >= EMPTY_STREAK_LIMIT) break;
+      }
     }
   } catch {
     // 静默

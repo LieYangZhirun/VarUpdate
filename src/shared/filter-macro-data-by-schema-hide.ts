@@ -132,16 +132,28 @@ export function filterValueBySchemaHide(
   }
 
   // object（显式或隐式）：子键在节点上
-  if (sn.$type !== undefined && typeof sn.$type === 'string' && sn.$type.trim().toLowerCase() !== 'object') {
-    // 标量带约束等，不应有 object value；原样返回
-    if (!Array.isArray(value) && typeof value === 'object') {
-      return value;
+  // 若 $type 为 $defs 引用名，先解引用到实际结构体后再处理子键的 $hide
+  let effectiveNode = sn;
+  if (sn.$type !== undefined && typeof sn.$type === 'string') {
+    const ts = sn.$type.trim().toLowerCase();
+    // 非内置基础类型且非容器类型 → 可能是 $defs 引用
+    if (!PRIMITIVE_TYPES.has(ts) && !FORCE_PRIMITIVE_NAMES_LOWER.has(ts)
+        && parseArrayInner(sn.$type) === null && parseRecordInner(sn.$type) === null) {
+      const resolvedDef = schemaRaw.$defs?.[sn.$type.trim()];
+      if (resolvedDef && typeof resolvedDef === 'object' && !Array.isArray(resolvedDef)) {
+        effectiveNode = resolvedDef as Record<string, any>;
+      }
+    } else if (ts !== 'object') {
+      // 标量带约束等，不应有 object value；原样返回
+      if (!Array.isArray(value) && typeof value === 'object') {
+        return value;
+      }
     }
   }
 
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    const childSn = getObjectChildSchema(sn, k);
+    const childSn = getObjectChildSchema(effectiveNode, k);
     if (schemaNodeIsHidden(childSn)) {
       continue;
     }

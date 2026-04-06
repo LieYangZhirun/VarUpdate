@@ -380,7 +380,13 @@ async function handleMessageContent(
     await handleUpdate(updateTags, writeIndex);
   }
 
+  // 无标签消息 → 继承上层变量
   if (initialTags.length === 0 && updateTags.length === 0 && writeIndex !== undefined) {
+    inheritVariables(writeIndex);
+  }
+
+  // Initial 失败且 Update 被跳过 → 当前层未写入任何数据，需继承上层以防变量链断裂
+  if (initialTags.length > 0 && !initialPipelineOk && writeIndex !== undefined) {
     inheritVariables(writeIndex);
   }
 

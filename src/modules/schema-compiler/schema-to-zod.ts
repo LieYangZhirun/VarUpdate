@@ -8,6 +8,7 @@
 
 // z（Zod）由宿主注入全局，无 import；下列为项目内依赖。
 import { FORCE_PRIMITIVE_NAMES_LOWER } from '../../shared/schema-force-primitives.js';
+import { wildcardMatch } from '../../shared/wildcard.js';
 import { ScriptError } from '../../types/index.js';
 
 // ═══════════════════════════════════════════
@@ -234,7 +235,8 @@ function resolveType(typeStr: string, path: string): z.ZodType<any> {
     case 'string(force)': return z.coerce.string();
     case 'boolean':       return z.boolean();
     case 'any':           return z.any();
-    case 'object':        return z.object({}).strict();
+    // 裸 'object' 类型（非 compileTypedNode 中带子字段的 $type:object）：允许任意键
+    case 'object':        return z.object({}).passthrough();
     default:              return resolveDefRef(trimmed, path);
   }
 }
@@ -321,15 +323,26 @@ function applyConstraints(baseType: z.ZodType<any>, node: Record<string, any>, p
 
 /**
  * S3: 将 refine 结果取反
+ *
+ * 保留 baseType 的类型信息（而非退化为 z.any()），
+ * 使取反约束仍能由 Zod 推断出底层类型。
  */
 function wrapNegate(zodType: z.ZodType<any>, negate: boolean): z.ZodType<any> {
   if (!negate) return zodType;
-  // 取反逻辑：通过 superRefine 包装，校验通过时反而失败
-  // 实际做法：对原始 zodType safeParse，通过则此 refine 失败
+  // 取反逻辑：在原始 zodType 上追加 refine，校验通过则视为不满足
   const original = zodType;
-  return z.any().refine(
-    (val: any) => !original.safeParse(val).success,
-    { message: '取反约束未满足（$! 前缀）' }
+  return original.refine(
+    (val: any) => {
+      // 对自身 refine 套 safeParse 会循环；此处拆解：
+      // original 中已有的 refine 约束通过时，取反应失败。
+      // 用 catch 兜底：若 safeParse 内部出错则放行（保守策略）。
+      try {
+        return !original.safeParse(val).success;
+      } catch {
+        return true;
+      }
+    },
+    { message: '取反约束未满足（$! 前缀）' },
   ) as any;
 }
 
@@ -438,47 +451,7 @@ function applyEither(baseType: z.ZodType<any>, branches: any[], path: string): z
   return z.union(branchTypes as [z.ZodType, z.ZodType, ...z.ZodType[]]);
 }
 
-// ═══════════════════════════════════════════
-//  通配符匹配
-// ═══════════════════════════════════════════
-
-/**
- * S4: 通配符模式匹配
- *
- * 规则：1-2 个 * 每个匹配恰好 1 字符；3+ 个 * 匹配任意长度。
- * 大小写不敏感。
- */
-function wildcardMatch(pattern: string, text: string): boolean {
-  const p = pattern.toLowerCase();
-  const t = text.toLowerCase();
-  const chars = Array.from(p);
-  const starCount = chars.filter(c => c === '*').length;
-
-  if (starCount === 0) return p === t;
-
-  const parts: string[] = [];
-  let i = 0;
-  while (i < chars.length) {
-    if (chars[i] === '*') {
-      if (starCount <= 2) {
-        parts.push('.');
-        i++;
-      } else {
-        while (i < chars.length && chars[i] === '*') i++;
-        parts.push('.*');
-      }
-    } else {
-      parts.push(chars[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-      i++;
-    }
-  }
-
-  try {
-    return new RegExp('^' + parts.join('') + '$', 'su').test(t);
-  } catch {
-    return false;
-  }
-}
+// wildcardMatch 已统一由 shared/wildcard.ts 提供，此处不再重复实现。
 
 // ═══════════════════════════════════════════
 //  工具函数

@@ -308,7 +308,13 @@ function looseEqual(left: any, right: any): boolean {
   return String(left) === String(right);
 }
 
-/** 数值比较 */
+/**
+ * 数值比较
+ *
+ * 两条调用路径：
+ * - compare() → 仅传入 >, >=, <, <=（==/!= 等由 compare 中的 looseEqual / Object.is 分流）
+ * - evaluateLengthComparison() → 可传入任意运算符（# 后直接解析出的 op，包括 ==, ===, != 等）
+ */
 function numericCompare(left: any, op: string, right: any): boolean {
   const l = Number(left);
   const r = Number(right);
