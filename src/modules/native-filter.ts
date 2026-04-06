@@ -58,22 +58,35 @@ let sendingMessageStopper: { stop: () => void } | null = null;
 /**
  * WORLDINFO_SCAN_DONE 回调
  *
- * 酒馆在完成世界书关键词扫描后、实际注入提示词前触发。
- * 回调参数包含已激活的条目列表（可就地修改）。
+ * 酒馆在世界书关键词扫描循环的每轮结束后触发。
+ * 回调参数结构：
+ *   data.activated.entries: Map<string, FlattenedWorldInfoEntry>  — 已激活条目
+ *   data.sortedEntries: FlattenedWorldInfoEntry[]                 — 全部候选条目（含已激活 + 待扫描）
+ *
+ * 过滤策略：从 activated.entries 中移除不通过条件的条目。
+ * 同时从 sortedEntries 中移除，防止被移除的条目在后续递归扫描中重新激活。
  */
 function filterWorldInfoEntries(data: any): void {
-  if (!data?.entries || !Array.isArray(data.entries)) return;
+  const activatedEntries: Map<string, any> | undefined = data?.activated?.entries;
+  if (!activatedEntries || !(activatedEntries instanceof Map)) return;
 
   const varData = getLatestMessageData();
 
-  // 从后向前遍历，移除不通过的条目
-  for (let i = data.entries.length - 1; i >= 0; i--) {
-    const entry = data.entries[i];
+  // 遍历 Map，移除条件不满足的条目
+  for (const [key, entry] of activatedEntries) {
     const text = entry?.comment ?? '';
     if (!text) continue; // 无备注 → 不过滤
 
     if (!evaluateAllConditions(text, varData)) {
-      data.entries.splice(i, 1);
+      activatedEntries.delete(key);
+
+      // 同步从 sortedEntries 中移除，防止递归扫描重新激活此条目
+      if (Array.isArray(data.sortedEntries)) {
+        const idx = data.sortedEntries.indexOf(entry);
+        if (idx !== -1) {
+          data.sortedEntries.splice(idx, 1);
+        }
+      }
     }
   }
 }

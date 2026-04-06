@@ -43,6 +43,26 @@ function fireEvent(name: string, data: any) {
   if (handler) handler(data);
 }
 
+/**
+ * 构造 WORLDINFO_SCAN_DONE 的 payload
+ * 酒馆实际结构：{ activated: { entries: Map<string, entry> }, sortedEntries: entry[] }
+ */
+function makeWorldInfoPayload(entries: Array<{ comment?: string; content?: string }>) {
+  const map = new Map<string, any>();
+  const sortedEntries: any[] = [];
+  entries.forEach((entry, i) => {
+    const key = `world.${i}`;
+    map.set(key, entry);
+    sortedEntries.push(entry);
+  });
+  return { activated: { entries: map }, sortedEntries };
+}
+
+/** 从 payload 中读取剩余条目为数组（方便断言） */
+function getActivatedEntries(payload: any): any[] {
+  return [...payload.activated.entries.values()];
+}
+
 beforeEach(() => {
   handlers.clear();
   stopFns.clear();
@@ -88,39 +108,45 @@ describe('世界书条目过滤（worldinfo_scan_done）', () => {
   beforeEach(() => registerFilterHooks());
 
   it('无标签条目 → 保留', () => {
-    const data = { entries: [{ comment: '普通设定', content: '内容' }] };
-    fireEvent('worldinfo_scan_done', data);
-    expect(data.entries).toHaveLength(1);
+    const payload = makeWorldInfoPayload([{ comment: '普通设定', content: '内容' }]);
+    fireEvent('worldinfo_scan_done', payload);
+    expect(getActivatedEntries(payload)).toHaveLength(1);
   });
 
   it('标签通过 → 保留', () => {
     mockData = { HP: 80 };
-    const data = { entries: [{ comment: '["HP" >= 60] 战斗设定' }] };
-    fireEvent('worldinfo_scan_done', data);
-    expect(data.entries).toHaveLength(1);
+    const payload = makeWorldInfoPayload([{ comment: '["HP" >= 60] 战斗设定' }]);
+    fireEvent('worldinfo_scan_done', payload);
+    expect(getActivatedEntries(payload)).toHaveLength(1);
   });
 
   it('标签不通过 → 移除', () => {
     mockData = { HP: 30 };
-    const data = { entries: [{ comment: '["HP" >= 60] 战斗设定' }] };
-    fireEvent('worldinfo_scan_done', data);
-    expect(data.entries).toHaveLength(0);
+    const payload = makeWorldInfoPayload([{ comment: '["HP" >= 60] 战斗设定' }]);
+    fireEvent('worldinfo_scan_done', payload);
+    expect(getActivatedEntries(payload)).toHaveLength(0);
   });
 
   it('混合条目的正确过滤', () => {
     mockData = { HP: 80, MP: 10 };
-    const data = {
-      entries: [
-        { comment: '["HP" >= 60] 高血量设定' },       // 通过
-        { comment: '["MP" >= 50] 高魔力设定' },       // 不通过
-        { comment: '普通设定' },                        // 无标签，保留
-        { comment: '["HP" >= 100] 满血设定' },         // 不通过
-      ],
-    };
-    fireEvent('worldinfo_scan_done', data);
-    expect(data.entries).toHaveLength(2);
-    expect(data.entries[0].comment).toContain('高血量');
-    expect(data.entries[1].comment).toBe('普通设定');
+    const payload = makeWorldInfoPayload([
+      { comment: '["HP" >= 60] 高血量设定' },       // 通过
+      { comment: '["MP" >= 50] 高魔力设定' },       // 不通过
+      { comment: '普通设定' },                        // 无标签，保留
+      { comment: '["HP" >= 100] 满血设定' },         // 不通过
+    ]);
+    fireEvent('worldinfo_scan_done', payload);
+    const remaining = getActivatedEntries(payload);
+    expect(remaining).toHaveLength(2);
+    expect(remaining[0].comment).toContain('高血量');
+    expect(remaining[1].comment).toBe('普通设定');
+  });
+
+  it('被过滤的条目同时从 sortedEntries 中移除', () => {
+    mockData = { HP: 30 };
+    const payload = makeWorldInfoPayload([{ comment: '["HP" >= 60] 战斗设定' }]);
+    fireEvent('worldinfo_scan_done', payload);
+    expect(payload.sortedEntries).toHaveLength(0);
   });
 });
 
@@ -189,22 +215,22 @@ describe('变量数据状态', () => {
 
   it('data 为空时 → 所有带标签条目被过滤', () => {
     mockData = {};
-    const data = { entries: [{ comment: '["HP" >= 60] 需要变量' }] };
-    fireEvent('worldinfo_scan_done', data);
-    expect(data.entries).toHaveLength(0);
+    const payload = makeWorldInfoPayload([{ comment: '["HP" >= 60] 需要变量' }]);
+    fireEvent('worldinfo_scan_done', payload);
+    expect(getActivatedEntries(payload)).toHaveLength(0);
   });
 
   it('data 更新后过滤结果随之变化', () => {
     // 第一次：HP 不足
     mockData = { HP: 30 };
-    const data1 = { entries: [{ comment: '["HP" >= 60] 高血量' }] };
-    fireEvent('worldinfo_scan_done', data1);
-    expect(data1.entries).toHaveLength(0);
+    const payload1 = makeWorldInfoPayload([{ comment: '["HP" >= 60] 高血量' }]);
+    fireEvent('worldinfo_scan_done', payload1);
+    expect(getActivatedEntries(payload1)).toHaveLength(0);
 
     // 第二次：HP 恢复
     mockData = { HP: 80 };
-    const data2 = { entries: [{ comment: '["HP" >= 60] 高血量' }] };
-    fireEvent('worldinfo_scan_done', data2);
-    expect(data2.entries).toHaveLength(1);
+    const payload2 = makeWorldInfoPayload([{ comment: '["HP" >= 60] 高血量' }]);
+    fireEvent('worldinfo_scan_done', payload2);
+    expect(getActivatedEntries(payload2)).toHaveLength(1);
   });
 });
