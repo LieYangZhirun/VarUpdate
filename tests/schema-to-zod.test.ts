@@ -94,9 +94,20 @@ describe('schema-to-zod', () => {
   describe('约束', () => {
     it('$min / $max → 数值范围校验', () => {
       const schema = compileSchema({ HP: { $type: 'number', $min: 0, $max: 100 } });
-      expect(validateWithSchema(schema, { HP: 50 }, mockContext()).success).toBe(true);
-      expect(validateWithSchema(schema, { HP: -1 }, mockContext()).success).toBe(false);
-      expect(validateWithSchema(schema, { HP: 101 }, mockContext()).success).toBe(false);
+      
+      // 范围内的值应该保持不变
+      const validResult = validateWithSchema(schema, { HP: 50 }, mockContext());
+      expect(validResult.success).toBe(true);
+      
+      // 超出下限的值应该被截断到下限
+      const minResult = safeParseWithContext(schema, { HP: -1 }, mockContext());
+      expect(minResult.success).toBe(true);
+      expect(minResult.data?.HP).toBe(0); // 截断到 min 值
+      
+      // 超出上限的值应该被截断到上限
+      const maxResult = safeParseWithContext(schema, { HP: 101 }, mockContext());
+      expect(maxResult.success).toBe(true);
+      expect(maxResult.data?.HP).toBe(100); // 截断到 max 值
     });
 
     it('$optional → .optional()', () => {
@@ -192,8 +203,14 @@ describe('schema-to-zod', () => {
       });
 
       const ctx = mockContext({ HPMax: 100 });
+      
+      // 范围内的值应该保持不变
       expect(validateWithSchema(schema, { HP: 80, HPMax: 100 }, ctx).success).toBe(true);
-      expect(validateWithSchema(schema, { HP: 120, HPMax: 100 }, ctx).success).toBe(false);
+      
+      // 超出refer()约束的值应该被截断
+      const result = safeParseWithContext(schema, { HP: 120, HPMax: 100 }, ctx);
+      expect(result.success).toBe(true);
+      expect(result.data?.HP).toBe(100); // 截断到 refer(HPMax) 值
     });
 
     it('refer() 引用不存在的路径 → 静默跳过', () => {
@@ -260,7 +277,8 @@ describe('schema-to-zod', () => {
       const data = { 角色: { HP: 999, HP上限: 50 } };
       const ctx = mockContext(data);
       const r = safeParseWithContext(schema, data, ctx);
-      expect(r.success).toBe(false);
+      expect(r.success).toBe(true); // 截断机制让校验成功
+      expect(r.data?.角色?.HP).toBe(50); // HP 被截断到 refer(角色/HP上限) 值
 
       const ok = safeParseWithContext(schema, { 角色: { HP: 40, HP上限: 50 } }, mockContext({ 角色: { HP: 40, HP上限: 50 } }));
       expect(ok.success).toBe(true);

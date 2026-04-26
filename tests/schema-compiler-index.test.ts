@@ -166,7 +166,8 @@ describe('schema-compiler/index.ts 封装层', () => {
       const ctx = mockContext(data);
       const safeParse = bindSafeParseWithContext(compiled, ctx);
       const result = safeParse(data);
-      expect(result.success).toBe(false); // HP 超过 refer(HPMax)=100
+      expect(result.success).toBe(true); // 截断机制让校验成功
+      expect(result.data?.HP).toBe(100); // HP 被截断到 refer(HPMax) 值
 
       // HP 在范围内
       const dataOk = { HP: 80, HPMax: 100 };

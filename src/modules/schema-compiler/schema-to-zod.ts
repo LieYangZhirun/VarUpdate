@@ -351,34 +351,26 @@ function wrapNegate(zodType: z.ZodType<any>, negate: boolean): z.ZodType<any> {
 // ═══════════════════════════════════════════
 
 function applyMinMax(t: z.ZodType<any>, op: 'min' | 'max', value: any, path: string): z.ZodType<any> {
+  // 检查是否为数字类型
+  if (!isNumberType(t)) {
+    return applyMinMaxLegacy(t, op, value, path); // 回退到原有refine逻辑
+  }
+  
+  // 处理refer()引用
   const referPath = extractRefer(value);
   if (referPath) {
-    return t.refine(
-      (val: any) => {
-        if (!_ctx) return true;
-        const refVal = _ctx.resolveRef(referPath);
-        if (typeof refVal !== 'number') return true;
-        if (typeof val === 'number') return op === 'min' ? val >= refVal : val <= refVal;
-        const len = getLength(val);
-        return len !== null ? (op === 'min' ? len >= refVal : len <= refVal) : true;
-      },
-      { message: `${op} 约束未满足（refer: ${referPath}）` }
-    ) as any;
-  }
-
-  if (typeof value === 'number') {
-    if ('min' in t && typeof (t as any).min === 'function') {
-      return op === 'min' ? (t as any).min(value) : (t as any).max(value);
+    if (!isValidReferPath(referPath)) {
+      return t; // 无效路径时跳过约束
     }
-    return t.refine(
-      (val: any) => {
-        if (typeof val === 'number') return op === 'min' ? val >= value : val <= value;
-        const len = getLength(val);
-        return len !== null ? (op === 'min' ? len >= value : len <= value) : true;
-      },
-      { message: `${op} 约束未满足: ${value}` }
-    ) as any;
+    return applyDynamicClamp(t, op, referPath, path);
   }
+  
+  // 处理静态数值约束
+  if (typeof value === 'number' && isFinite(value)) {
+    return applyStaticClamp(t, op, value, path);
+  }
+  
+  // 约束值无效时跳过
   return t;
 }
 
@@ -463,9 +455,218 @@ function extractRefer(value: any): string | null {
   return match ? match[1].trim() : null;
 }
 
+/**
+ * 验证 refer 路径格式是否有效
+ * 
+ * @param referPath refer 路径字符串
+ * @returns 如果路径格式有效返回 true，否则返回 false
+ */
+function isValidReferPath(referPath: string): boolean {
+  if (!referPath || typeof referPath !== 'string') return false;
+  
+  // 基本格式检查：不能为空，不能包含特殊字符
+  if (referPath.trim().length === 0) return false;
+  
+  // 检查路径分段是否有效（不能有空分段）
+  const segments = referPath.split('/');
+  return segments.every(segment => segment.trim().length > 0);
+}
+
+/**
+ * 记录数值截断事件
+ * 
+ * @param path 字段路径
+ * @param originalValue 原始值
+ * @param clampedValue 截断后的值
+ * @param operation 操作类型 ('min' | 'max')
+ * @param constraint 约束值
+ */
+function logClampEvent(
+  path: string, 
+  originalValue: number, 
+  clampedValue: number, 
+  operation: 'min' | 'max', 
+  constraint: number | string
+): void {
+  const logMessage = `数值截断: ${path} 从 ${originalValue} 截断到 ${clampedValue} (${operation}: ${constraint})`;
+  
+  // 开发模式下输出详细日志
+  if (typeof console !== 'undefined' && console.debug) {
+    console.debug(logMessage);
+  }
+}
+
+/**
+ * 应用静态数值截断
+ * 
+ * @param t Zod 类型
+ * @param op 操作类型 ('min' | 'max')
+ * @param value 约束值
+ * @param path 字段路径
+ * @returns 带有截断逻辑的 Zod 类型
+ */
+function applyStaticClamp(
+  t: z.ZodType<any>, 
+  op: 'min' | 'max', 
+  value: number, 
+  path: string
+): z.ZodType<any> {
+  return t.transform((val: any) => {
+    // 只处理有限数字
+    if (typeof val !== 'number' || !isFinite(val)) {
+      return val; // 非数字或特殊值不处理
+    }
+    
+    // 执行截断
+    const clamped = op === 'min' ? Math.max(val, value) : Math.min(val, value);
+    
+    // 记录截断事件
+    if (clamped !== val) {
+      logClampEvent(path, val, clamped, op, value);
+    }
+    
+    return clamped;
+  }) as any;
+}
+
+/**
+ * 解析动态约束值
+ * 
+ * @param referPath refer 路径
+ * @returns 解析的数值，如果无效则返回 null
+ */
+function resolveDynamicConstraint(referPath: string): number | null {
+  try {
+    if (!_ctx) return null; // 无上下文时静默跳过
+    
+    const refVal = _ctx.resolveRef(referPath);
+    
+    if (typeof refVal !== 'number') {
+      return null; // 类型错误时静默跳过
+    }
+    
+    if (!isFinite(refVal)) {
+      return null; // 特殊数值时静默跳过
+    }
+    
+    return refVal;
+  } catch (error) {
+    return null; // 解析失败时静默跳过
+  }
+}
+
+/**
+ * 应用动态数值截断（支持 refer() 引用）
+ * 
+ * @param t Zod 类型
+ * @param op 操作类型 ('min' | 'max')
+ * @param referPath refer 路径
+ * @param path 字段路径
+ * @returns 带有动态截断逻辑的 Zod 类型
+ */
+function applyDynamicClamp(
+  t: z.ZodType<any>, 
+  op: 'min' | 'max', 
+  referPath: string, 
+  path: string
+): z.ZodType<any> {
+  return t.transform((val: any) => {
+    // 只处理有限数字
+    if (typeof val !== 'number' || !isFinite(val)) {
+      return val;
+    }
+    
+    // 解析动态约束值
+    const refVal = resolveDynamicConstraint(referPath);
+    if (refVal === null) {
+      return val; // 引用值无效时跳过截断
+    }
+    
+    // 执行截断
+    const clamped = op === 'min' ? Math.max(val, refVal) : Math.min(val, refVal);
+    
+    // 记录截断事件
+    if (clamped !== val) {
+      logClampEvent(path, val, clamped, op, `refer(${referPath})=${refVal}`);
+    }
+    
+    return clamped;
+  }) as any;
+}
+
+/**
+ * 遗留的 min/max 约束应用逻辑（用于非数字类型）
+ * 
+ * @param t Zod 类型
+ * @param op 操作类型 ('min' | 'max')
+ * @param value 约束值
+ * @param path 字段路径
+ * @returns 带有 refine 校验逻辑的 Zod 类型
+ */
+function applyMinMaxLegacy(t: z.ZodType<any>, op: 'min' | 'max', value: any, path: string): z.ZodType<any> {
+  const referPath = extractRefer(value);
+  if (referPath) {
+    return t.refine(
+      (val: any) => {
+        if (!_ctx) return true;
+        const refVal = _ctx.resolveRef(referPath);
+        if (typeof refVal !== 'number') return true;
+        if (typeof val === 'number') return op === 'min' ? val >= refVal : val <= refVal;
+        const len = getLength(val);
+        return len !== null ? (op === 'min' ? len >= refVal : len <= refVal) : true;
+      },
+      { message: `${op} 约束未满足（refer: ${referPath}）` }
+    ) as any;
+  }
+
+  if (typeof value === 'number') {
+    if ('min' in t && typeof (t as any).min === 'function') {
+      return op === 'min' ? (t as any).min(value) : (t as any).max(value);
+    }
+    return t.refine(
+      (val: any) => {
+        if (typeof val === 'number') return op === 'min' ? val >= value : val <= value;
+        const len = getLength(val);
+        return len !== null ? (op === 'min' ? len >= value : len <= value) : true;
+      },
+      { message: `${op} 约束未满足: ${value}` }
+    ) as any;
+  }
+  return t;
+}
+
 function getLength(val: any): number | null {
   if (Array.isArray(val)) return val.length;
   if (typeof val === 'string') return val.length;
   if (typeof val === 'object' && val !== null) return Object.keys(val).length;
   return null;
+}
+
+/**
+ * 检查 Zod 类型是否为数字类型（number, integer, number(force), integer(force)）
+ * 
+ * @param zodType 要检查的 Zod 类型
+ * @returns 如果是数字类型返回 true，否则返回 false
+ */
+function isNumberType(zodType: z.ZodType<any>): boolean {
+  try {
+    // 通过尝试解析一个数字来检查类型
+    const testResult = zodType.safeParse(42);
+    if (!testResult.success) return false;
+    
+    // 进一步检查是否为数字类型
+    if (typeof testResult.data !== 'number') return false;
+    
+    // 测试字符串输入，如果是 force 类型应该能转换
+    const stringTest = zodType.safeParse('42');
+    const isForceType = stringTest.success && typeof stringTest.data === 'number';
+    
+    // 测试小数，如果是 integer 类型应该失败
+    const floatTest = zodType.safeParse(42.5);
+    const isIntegerType = !floatTest.success;
+    
+    return true; // 通过了数字测试，确认为数字类型
+  } catch {
+    return false; // 任何异常都视为非数字类型
+  }
 }

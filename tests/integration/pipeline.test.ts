@@ -162,11 +162,11 @@ describe('VarUpdate 集成测试', () => {
 
       // HP 应成功更新
       expect(result.data.HP).toBe(80);
-      // MP 应被回滚到原值（Schema 拦截）
-      expect(result.data.MP).toBe(50);
-      // 1 条成功，1 条丢弃
-      expect(result.appliedCount).toBe(1);
-      expect(result.discarded.length).toBe(1);
+      // MP 应被截断到上限值（而不是回滚）
+      expect(result.data.MP).toBe(100);
+      // 2 条都成功（因为截断机制）
+      expect(result.appliedCount).toBe(2);
+      expect(result.discarded.length).toBe(0);
     });
   });
 
@@ -200,9 +200,10 @@ describe('VarUpdate 集成测试', () => {
 
       const result = executeUpdateSync(instructions, { ...currentData }, compiled, boundSafeParse);
 
-      // HP 应保持原值（refer(HPMax)=100 约束阻止了 120）
-      expect(result.data.HP).toBe(80);
-      expect(result.discarded.length).toBe(1);
+      // HP 应被截断到 refer(HPMax) 值（而不是保持原值）
+      expect(result.data.HP).toBe(100);
+      expect(result.discarded.length).toBe(0); // 截断机制让指令成功执行
+      expect(result.appliedCount).toBe(1);
     });
 
     it('$hide 标记 → 宏输出时隐藏字段', () => {
